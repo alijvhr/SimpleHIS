@@ -6,115 +6,98 @@
 
 **Technology Stack:**  
 - Backend: FastAPI (Python 3.10+)  
-- Database: SQLite (via SQLAlchemy ORM) – zero-configuration deployment  
+- Database: SQLite (via SQLAlchemy ORM) – zero-configuration  
 - Frontend: Jinja2 templates (HTML), pure CSS (variables in `/static/css/vars.css`), minimal jQuery, Font Awesome 6 (free)  
-- No external UI frameworks  
+- No UI frameworks (no Bootstrap, Tailwind, etc.)  
 - All UI text: Persian (Farsi), full RTL layout  
-- Logo: `/static/assets/logo.png`
+- Logo: `/static/assets/logo.png`  
 
 ## 1. Introduction
 
 ### 1.1 Purpose
-This document provides a complete and detailed specification for a lightweight, web-based Hospital Information System (HIS). The system automates core workflows of a small hospital/clinic: patient registration, admission for doctor visits or radiology (with notes), cash payment tracking for both services and prescriptions, doctor consultations with multi-drug prescription writing, radiology reporting with image upload, pharmacy inventory management and prescription dispensing, role-based user management, prescription search, and printable invoices.
+This document provides a complete and final specification for a lightweight, modern web-based Hospital Information System. The system manages patient registration, admission (doctor visit or radiology) with reason description, payment tracking (for admissions and prescriptions), doctor consultations with multi-drug prescriptions, radiology reporting with image upload, pharmacy inventory and prescription dispensing (including manual), role-based user management, and prescription printing/cancellation.
 
-The application emphasizes simplicity, readability, maintainability, and minimal dependencies.
+The application is simple, readable, maintainable, and deployable on a single server.
 
 ### 1.2 Scope
 **In Scope:**
-- Staff-only web interface
-- Patient registration → admission (with description) → payment (services) → service delivery
-- Prescription writing (unlimited drugs per prescription) → pricing → payment → dispensing
-- Radiology reporting with image upload
-- Pharmacy inventory with drug details
-- Prescription search and printable invoice
-- Transaction cancellation in cashier
-- Role-based access control (5 roles)
-- Dark/light mode, fully responsive, Persian RTL UI
+- Staff-only interface (Persian RTL)
+- Full patient workflow: registration → admission with description → payment → service → prescription/report → dispensing/printing
+- Unlimited drugs per prescription
+- Prescription payment and cancellation
+- Modern, clean UI with light gray background and blue primary color
+- Print-friendly prescription invoice
+- Login-protected (no self-registration)
 
 **Out of Scope:**
-- Online appointments
-- Insurance integration
-- Advanced analytics
+- Appointment scheduling
+- Insurance/billing complexity
 - Patient portal
-- Multi-branch support
+- Advanced analytics
 
 ### 1.3 Definitions
-- **Admission**: Registration for doctor visit or radiology service
-- **Prescription**: List of drugs (doctor-written or manual), with total price, payable separately
-- **Cashier**: Unified payment point for admissions (services) and prescriptions (drugs)
+- Admission: Patient acceptance for doctor visit or radiology (with description/reason)
+- Prescription: Doctor-written or manual, multi-drug, payable, printable
 
 ## 2. Overall Description
 
 ### 2.1 Product Functions Overview
-1. User login → role-based dashboard
-2. Reception: register/search patient, create admission with description/notes, record payments/cancellations
-3. Doctor: view paid admissions, review history, write multi-drug prescriptions (auto-price calculation)
-4. Radiologist: view paid radiology admissions, write report + upload images
-5. Pharmacy: manage drug inventory, dispense prescriptions (reduce stock), manual prescriptions
-6. Admin: manage users/roles
-7. Common: search prescriptions by ID, print invoice, cancel transactions
-
-All records include `created_at` timestamp and `created_by` user ID.
+1. User logs in → Home dashboard (logo-centered panel)
+2. Reception: register/search patients, create admissions with description, record payments/cancellations
+3. Doctor: view paid admissions, write multi-drug prescriptions (auto-calculate total), complete visit
+4. Radiologist: view paid radiology admissions, write reports + upload images
+5. Pharmacy: manage inventory, dispense/fill prescriptions, manual prescriptions, view/search old prescriptions
+6. Cashier (Reception): handle payments for admissions and prescriptions, cancel transactions
+7. Admin: manage users
 
 ### 2.2 User Classes and Roles
 
-| Role              | Persian Name      | Key Permissions                                                                      |
-|-------------------|-------------------|--------------------------------------------------------------------------------------|
-| Admin (مدیرکل)    | مدیرکل           | Full access + user management (create/edit/role change/deactivate)                   |
-| Reception (پذیرش) | پذیرش            | Patient CRUD, admission creation, cashier (payments/cancellations for services & prescriptions) |
-| Doctor (پزشک)     | پزشک             | View paid doctor admissions, patient file, write prescriptions                      |
-| Radiologist (رادیولوژیست) | رادیولوژیست     | View paid radiology admissions, write reports + upload images                        |
-| Pharmacy (داروخانه) | داروخانه        | Drug inventory, manual prescriptions, dispense doctor prescriptions                  |
+| Role              | Persian Name      | Allowed Modules/Pages                                                                 |
+|-------------------|-------------------|---------------------------------------------------------------------------------------|
+| Admin (مدیرکل)    | مدیرکل           | All + User management (create/edit/deactivate/change role)                            |
+| Reception (پذیرش) | پذیرش            | Patient search/register, Admit (with description), Cashier (payments/cancellations)   |
+| Doctor (پزشک)     | پزشک             | Paid doctor admissions list, Patient file (history, write prescription, complete)     |
+| Radiologist (رادیولوژیست) | رادیولوژیست     | Paid radiology admissions list, Report form                                           |
+| Pharmacy (داروخانه) | داروخانه        | Inventory, Drug register, Manual prescription, Dispense doctor prescriptions, Search old prescriptions |
+
+All records include `created_at` and `created_by` (user ID).
 
 ### 2.3 Design Constraints
-- Pure CSS with all colors in `/static/css/vars.css` (light/dark variants)
-- Layout: Flexbox/Grid only (no floats)
-- Responsive: Mobile-first, sidebar → hamburger menu on ≤768px
-- Icons: Font Awesome 6
-- JS: jQuery only for dark mode, mobile menu, minor interactions (e.g., add/remove drug rows)
-- File uploads: Radiology images only → `/uploads/` with unique names
-- Printing: Browser-printable invoice page (CSS @media print)
+- **Colors** (defined in `/static/css/vars.css`):
+  ```css
+  :root {
+      --bg: #efefef;           /* Very light gray background */
+      --primary: #3698d4;      /* Main blue */
+      --text: #333;
+      --card-bg: #ffffff;
+      --border: #ddd;
+      --success: #28a745;
+      --danger: #dc3545;
+  }
+  body.dark {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --text: #e0e0e0;
+      /* etc. */
+  }
+  ```
+- Modern look: Card-based panels, subtle shadows, rounded corners, clean typography
+- Background: `--bg` on `<body>`
+- Primary buttons/links: `--primary`
+- Fully responsive (mobile-first, flexbox/grid, no floats)
+- Dark/light mode toggle in header
+- Font Awesome 6 icons throughout
+- Print styles for prescription invoice
 
-### 2.4 Folder Structure
-
-```
-/project-root
-├── main.py
-├── database.py
-├── auth.py
-├── routers/
-│   ├── reception.py
-│   ├── doctor.py
-│   ├── radiology.py
-│   ├── pharmacy.py
-│   ├── admin.py
-│   └── common.py
-├── models/
-├── schemas/
-├── templates/
-│   ├── layout/
-│   │   ├── base.htm
-│   │   └── panel.htm
-│   ├── reception/
-│   ├── doctor/
-│   ├── radiology/
-│   ├── pharmacy/
-│   ├── user/
-│   └── common/
-│       ├── login.htm
-│       ├── prescription_search.htm
-│       └── prescription_print.htm
-├── static/
-│   ├── css/
-│   │   ├── vars.css
-│   │   ├── style.css
-│   │   └── print.css
-│   ├── js/
-│   │   └── main.js
-│   └── assets/
-│       └── logo.png
-└── uploads/
-```
+### 2.4 Home & Layout
+- **Home/Dashboard**: Clean panel with centered large logo, welcome message, no other content
+- **Other Pages**: Same panel layout + role-specific content in main area
+- **Common Layout** (`templates/layout/base.htm`):
+  - RTL, Persian font
+  - Header: Right = Logo → `/home`, Left = User dropdown + Dark/Light toggle
+  - Sidebar: Role-based menu (collapses to hamburger on mobile)
+  - Main content: Card-based panels
+- All pages behind login (simple centered form)
 
 ## 3. Data Model (SQLite via SQLAlchemy)
 
@@ -124,10 +107,10 @@ class User(Base):
     username: str (unique)
     password_hash: str
     full_name: str
-    role: Enum('admin', 'reception', 'doctor', 'radiologist', 'pharmacy')
+    role: Enum('admin','reception','doctor','radiologist','pharmacy')
     is_active: bool = True
     created_at: datetime
-    created_by: int (FK User.id, nullable for initial admin)
+    created_by: int (FK User.id, nullable)
 
 class Patient(Base):
     id: int (PK)
@@ -135,7 +118,7 @@ class Patient(Base):
     full_name: str
     phone: str
     birth_date: date
-    gender: Enum('male', 'female', 'other')
+    gender: Enum('male','female','other')
     address: str (optional)
     created_at: datetime
     created_by: int (FK User.id)
@@ -143,34 +126,33 @@ class Patient(Base):
 class Admission(Base):
     id: int (PK)
     patient_id: int (FK Patient.id)
-    admission_type: Enum('doctor', 'radiology')
-    description: str              # New: reason for visit / radiology details (e.g., "درد کمر - MRI")
+    admission_type: Enum('doctor','radiology')
+    description: str              # Reason/complaint (e.g., "درد کمر - MRI کمر")
     radiology_type: str (optional)
-    status: Enum('waiting_payment', 'paid', 'completed', 'cancelled')
+    status: Enum('waiting_payment','paid','completed','cancelled')
     created_at: datetime
     created_by: int (FK User.id)
     paid_at: datetime (nullable)
     paid_by: int (FK User.id, nullable)
     completed_at: datetime (nullable)
-    cancelled_at: datetime (nullable)
 
 class Payment(Base):
     id: int (PK)
-    payable_type: Enum('admission', 'prescription')   # New: unified payment
-    payable_id: int                                   # FK to Admission.id or Prescription.id
+    payable_type: Enum('admission','prescription') 
+    payable_id: int               # FK to Admission.id or Prescription.id
     amount: decimal
     receipt_number: str (optional)
-    status: Enum('completed', 'cancelled')
+    status: Enum('paid','cancelled')
     created_at: datetime
     created_by: int (FK User.id)
 
 class Drug(Base):
     id: int (PK)
     name: str
-    company: str
-    form: str                    # e.g., "قرص", "شربت"
-    dosage: str                  # e.g., "500mg"
-    default_instructions: str    # e.g., "روزي ۲ عدد بعد غذا"
+    manufacturer: str
+    form: str (e.g., "قرص", "شربت")
+    dosage: str (e.g., "500mg")
+    default_instructions: str (e.g., "روزي ۲ عدد بعد غذا")
     price: decimal
     min_threshold: int = 10
     created_at: datetime
@@ -187,21 +169,21 @@ class StockTransaction(Base):
 class Prescription(Base):
     id: int (PK)
     patient_id: int (FK Patient.id)
-    admission_id: int (FK Admission.id, nullable)   # linked if from doctor visit
+    admission_id: int (FK Admission.id, nullable)  # null for manual
     is_manual: bool = False
-    total_amount: decimal                           # calculated from items
-    status: Enum('waiting_payment', 'paid', 'dispensed', 'cancelled')
+    total_amount: decimal         # Auto-calculated
+    status: Enum('waiting_payment','paid','dispensed','cancelled')
     created_at: datetime
     created_by: int (FK User.id)
-    paid_at: datetime (nullable)
     dispensed_at: datetime (nullable)
+    dispensed_by: int (FK User.id, nullable)
 
 class PrescriptionItem(Base):
     id: int (PK)
     prescription_id: int (FK Prescription.id)
     drug_id: int (FK Drug.id)
     quantity: int
-    instructions: str               # defaults from Drug.default_instructions, editable
+    instructions: str             # Default from Drug, editable
 
 class RadiologyReport(Base):
     id: int (PK)
@@ -221,96 +203,146 @@ Current stock = SUM(StockTransaction.quantity_change) per drug.
 
 ## 4. Functional Requirements
 
-### 4.1 Authentication & Common UI
-- Login/logout with Persian labels
-- Base layout: RTL, header (logo right, user dropdown left, dark/light toggle), collapsible sidebar
-- Dashboard with role-specific menu
-- Prescription search page (by prescription ID or patient national ID)
+### 4.1 Authentication
+- Simple centered login page (username/password, Persian labels)
+- No registration page – users created by Admin only
+- Session via secure cookie
+- Role-based access and menu
 
-### 4.2 Reception Module
-- Patient search/register
-- Admission creation:
-  - Required description field (reason for visit or specific radiology request)
-  - Status → waiting_payment
-- Cashier (unified):
-  - List of waiting_payment admissions and prescriptions
-  - Register payment → update status to paid
-  - Cancel transaction → mark admission/prescription as cancelled (with reason)
+### 4.2 Common UI
+- Home: Full-screen card with centered logo + "خوش آمدید"
+- All pages: Card layout with subtle shadow, rounded corners, `--primary` accents
+- Prescription Print: Dedicated printable page (A4-friendly, @media print styles)
 
-### 4.3 Doctor Module
-- Patient list: paid, non-completed doctor admissions
+### 4.3 Reception & Cashier
+- Patient search/register (as before)
+- Admit: Form with description field (mandatory)
+- Cashier:
+  - List waiting_payment items (admissions + prescriptions)
+  - Register payment → create Payment record, update status to paid
+  - Cancel transaction → mark as cancelled, optional note
+
+### 4.4 Doctor Module
+- Patient list: Paid non-completed doctor admissions
 - Patient file:
   - History tabs
-  - Prescription form: dynamic rows (add/remove drugs)
-    - Drug search/select → auto-fill company, form, dosage, default_instructions, price
-    - Quantity input → auto-calculate line total
-    - Instructions editable (pre-filled with default)
-    - Unlimited drugs
-    - Total amount calculated and saved
+  - Prescription form: Add unlimited drugs (dynamic rows)
+    - Drug search → auto-fill manufacturer, form, dosage, default_instructions, price
+    - Quantity + editable instructions
+    - Auto-calculate total_amount
+  - Submit → create Prescription (waiting_payment), items
   - Complete visit button
 
-### 4.4 Radiology Module
-- Patient list: paid radiology admissions
-- Report form with image uploads
-- Submit → mark admission completed
+### 4.5 Radiology Module
+- Unchanged except status flow
 
-### 4.5 Pharmacy Module
-- Inventory view with low-stock highlighting
-- Drug registration (all fields including price and default instructions)
-- Manual prescription creation (same multi-drug form as doctor)
-- Dispense doctor/manual prescriptions (after paid) → reduce stock
+### 4.6 Pharmacy Module
+- Inventory with calculated stock, low-stock highlight
+- Drug register/restock
+- Manual prescription: Same form as doctor, creates waiting_payment prescription
+- Dispense: List paid prescriptions → reduce stock → mark dispensed
+- Search old prescriptions by ID/patient → view details + print button
 
-### 4.6 Prescription Features
-- Search by prescription ID → view details
-- Print invoice page: clean layout with hospital logo, patient info, drug table (name, company, form, dosage, quantity, instructions, price), total amount, timestamps
-- CSS @media print for printer-friendly output
+### 4.7 Prescription Printing
+- Button on prescription view/dispense → opens print-friendly page with:
+  - Hospital logo, patient info, drug table (name, manufacturer, form, dosage, quantity, instructions, price), total amount
+  - Clean layout, Persian text
+
+### 4.8 Admin Module
+- Full user CRUD (no self-registration)
 
 ## 5. Non-Functional Requirements
-- Responsive across devices
-- Dark/light mode (CSS variables + localStorage)
-- Persian RTL layout and text
-- Simple, clean, well-commented code
-- Input validation + Persian error messages
-- Image upload size limit (≤5MB)
-- Browser print support for invoices
+- Modern card-based UI with specified colors
+- Fully responsive
+- Dark/light mode
+- Persian RTL throughout
+- Print-friendly prescription
+- Basic validation + Persian error messages
+- Secure password hashing, role checks
 
-## 6. Detailed Development Plan
+## 6. Folder Structure (Recommended)
+```
+/project-root
+├── main.py
+├── database.py
+├── auth.py
+├── routers/
+│   ├── reception.py
+│   ├── doctor.py
+│   ├── radiology.py
+│   ├── pharmacy.py
+│   ├── admin.py
+│   └── common.py
+├── models/
+├── schemas/
+├── templates/
+│   ├── layout/
+│   │   ├── base.htm
+│   │   └── panel.htm
+│   ├── common/
+│   │   ├── login.htm
+│   │   └── home.htm          # Logo-centered
+│   ├── reception/...
+│   ├── doctor/...
+│   ├── pharmacy/...
+│   └── print/
+│       └── prescription.htm  # Print template
+├── static/
+│   ├── css/
+│   │   ├── vars.css
+│   │   ├── style.css
+│   │   ├── responsive.css
+│   │   └── print.css
+│   ├── js/
+│   │   └── main.js           # Dynamic prescription rows, etc.
+│   └── assets/
+│       └── logo.png
+└── uploads/
+```
 
-**Phase 1: Setup & Auth (2-3 days)**  
-1. Project structure, FastAPI + Jinja2 + SQLite  
-2. User model, initial admin script  
-3. Login/logout, session, role checks  
+This SRS is now complete, incorporating all previous requirements and new updates. Ready for implementation guidance (e.g., with Copilot).
 
-**Phase 2: Layout & Common (2 days)**  
-1. `base.htm`, header, sidebar, dark/light toggle, RTL styling  
-2. Dashboard, prescription search page  
+## 7. Detailed Development Plan
 
-**Phase 3: Patient & Admission (3 days)**  
-1. Patient + Admission models (with description)  
-2. Search/register/admit forms  
-3. Unified Payment model  
+### Phase 1: Setup & Auth (2-3 days)
+1. Project structure + FastAPI + SQLite + Jinja2
+2. User model + initial admin script
+3. Simple login page + session auth
+4. Base layout with modern CSS vars (#efefef bg, #3698d4 primary)
 
-**Phase 4: Doctor & Prescription Core (4 days)**  
-1. Prescription models (multi-item, pricing)  
-2. Dynamic prescription form (jQuery add rows, auto-fill, calculation)  
-3. Doctor patient list and file  
+### Phase 2: Layout & Home (1-2 days)
+1. Home page (centered logo)
+2. Full panel layout + responsive sidebar + dark mode
+3. Role-based menu rendering
 
-**Phase 5: Cashier & Cancellation (2 days)**  
-1. Unified cashier page  
-2. Payment registration and cancellation logic  
+### Phase 3: Patient & Reception (3-4 days)
+1. Patient + Admission models (add description)
+2. Search/register/admit forms
+3. Cashier with payment + cancellation
 
-**Phase 6: Radiology (2 days)**  
-1. Report + multi-image upload  
+### Phase 4: Drug & Prescription Core (3 days)
+1. Enhanced Drug model
+2. Multi-drug prescription form (shared component)
+3. Total calculation + waiting_payment status
 
-**Phase 7: Pharmacy & Drugs (3 days)**  
-1. Drug model with extended fields  
-2. Inventory, manual prescription, dispensing  
+### Phase 5: Doctor Module (2-3 days)
+1. Patient list + file page
+2. Integrate prescription form
 
-**Phase 8: Print & Polish (2-3 days)**  
-1. Prescription print page + print.css  
-2. Full Persian text, validation, responsive testing  
-3. End-to-end workflow testing  
+### Phase 6: Pharmacy Module (4 days)
+1. Inventory + drug CRUD
+2. Manual prescription + dispense workflow
+3. Prescription search + printable invoice template
 
-**Total estimated: 20-25 days**
+### Phase 7: Radiology & Admin (3 days)
+1. Radiology report + uploads
+2. Admin user management
 
-This SRS is now complete, consistent, and ready for implementation.
+### Phase 8: Polish & Testing (4 days)
+1. Full Persian RTL text
+2. Modern styling refinements
+3. Print invoice testing
+4. End-to-end workflow testing
+5. Security & responsiveness check
+
+**Total estimated: 22-28 days**
