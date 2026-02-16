@@ -2,6 +2,8 @@
 
 A modern, lightweight, Persian (Farsi) web-based Hospital Information System built with FastAPI and SQLite.
 
+> **🔒 Security Update (Feb 16, 2026)**: All dependencies updated to patched versions to fix critical vulnerabilities. See [SECURITY_UPDATE.md](SECURITY_UPDATE.md) for details.
+
 ## Features
 
 - **Persian RTL Interface**: Full right-to-left layout with Persian text
