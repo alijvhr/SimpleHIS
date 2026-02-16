@@ -122,24 +122,3 @@ async def complete_visit(
         db.commit()
     
     return RedirectResponse(url="/doctor/patients", status_code=302)
-
-@router.get("/api/drugs/search")
-async def search_drugs(
-    q: str,
-    db: Session = Depends(get_db)
-):
-    """API endpoint for drug search autocomplete"""
-    drugs = db.query(Drug).filter(Drug.name.contains(q)).limit(10).all()
-    
-    return JSONResponse([
-        {
-            "id": drug.id,
-            "name": drug.name,
-            "manufacturer": drug.manufacturer,
-            "form": drug.form,
-            "dosage": drug.dosage,
-            "default_instructions": drug.default_instructions,
-            "price": float(drug.price)
-        }
-        for drug in drugs
-    ])
