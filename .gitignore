@@ -1,2 +1,16 @@
 .idea
 .venv
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+hospital.db
+*.db
+uploads/*.png
+uploads/*.jpg
+uploads/*.jpeg
+uploads/*.gif
+.env
+.DS_Store
+*.log

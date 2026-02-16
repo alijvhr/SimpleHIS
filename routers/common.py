@@ -67,3 +67,23 @@ async def home(request: Request, current_user: User = Depends(require_auth)):
             "active_page": "home"
         }
     )
+
+@router.get("/print/prescription/{prescription_id}", response_class=HTMLResponse)
+async def print_prescription(
+    request: Request,
+    prescription_id: int,
+    current_user: User = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
+    """Print prescription"""
+    from models.prescription import Prescription
+    
+    prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
+    
+    return templates.TemplateResponse(
+        "print/prescription.htm",
+        {
+            "request": request,
+            "prescription": prescription
+        }
+    )

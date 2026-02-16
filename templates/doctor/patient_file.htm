@@ -1,0 +1,196 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}پرونده بیمار - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block extra_css %}
+<style>
+.drug-suggestions {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 8px var(--shadow);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    margin-top: 2px;
+    width: 100%;
+}
+
+.suggestion-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+}
+
+.suggestion-item:hover {
+    background: var(--bg);
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">پرونده بیمار: {{ patient.full_name }}</h2>
+    </div>
+    <div class="card-body">
+        <!-- Patient Info -->
+        <div class="grid grid-4 mb-4">
+            <div>
+                <strong>کد ملی:</strong> {{ patient.national_id }}
+            </div>
+            <div>
+                <strong>تلفن:</strong> {{ patient.phone }}
+            </div>
+            <div>
+                <strong>تاریخ تولد:</strong> {{ patient.birth_date }}
+            </div>
+            <div>
+                <strong>جنسیت:</strong>
+                {% if patient.gender.value == 'male' %}مرد
+                {% elif patient.gender.value == 'female' %}زن
+                {% else %}سایر{% endif %}
+            </div>
+        </div>
+        
+        <!-- Current Admission -->
+        <div class="alert alert-info mb-4">
+            <strong>علت مراجعه:</strong> {{ admission.description }}
+        </div>
+        
+        <!-- Previous Prescriptions -->
+        {% if previous_prescriptions %}
+        <h3 class="mb-3">نسخه‌های قبلی</h3>
+        <table class="table mb-4">
+            <thead>
+                <tr>
+                    <th>شماره نسخه</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for presc in previous_prescriptions %}
+                <tr>
+                    <td>{{ presc.id }}</td>
+                    <td>{{ presc.created_at.strftime('%Y/%m/%d') }}</td>
+                    <td>{{ "{:,}".format(presc.total_amount|int) }} تومان</td>
+                    <td>
+                        {% if presc.status.value == 'dispensed' %}
+                        <span class="badge badge-success">تحویل شده</span>
+                        {% elif presc.status.value == 'paid' %}
+                        <span class="badge badge-info">پرداخت شده</span>
+                        {% else %}
+                        <span class="badge badge-warning">در انتظار پرداخت</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button onclick="printPrescription({{ presc.id }})" class="btn btn-sm btn-secondary">
+                            <i class="fas fa-print"></i>
+                            چاپ
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+        
+        <!-- Prescription Form -->
+        <h3 class="mb-3">نسخه جدید</h3>
+        <form method="POST" action="/doctor/prescription/create" id="prescriptionForm">
+            <input type="hidden" name="patient_id" value="{{ patient.id }}">
+            <input type="hidden" name="admission_id" value="{{ admission.id }}">
+            <input type="hidden" name="total_amount" value="0">
+            
+            <div class="table-responsive">
+                <table class="table" id="prescriptionTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 250px;">دارو</th>
+                            <th>شرکت سازنده</th>
+                            <th>فرم</th>
+                            <th>دوز</th>
+                            <th style="width: 80px;">تعداد</th>
+                            <th style="width: 200px;">دستور مصرف</th>
+                            <th>قیمت واحد</th>
+                            <th>جمع</th>
+                            <th style="width: 70px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td style="position: relative;">
+                                <input type="text" class="form-control drug-search" 
+                                       name="drug_search_0" 
+                                       placeholder="جستجوی دارو..." 
+                                       autocomplete="off"
+                                       onkeyup="searchDrug(this)">
+                                <input type="hidden" class="drug-id" name="drug_id[]">
+                                <div class="drug-suggestions"></div>
+                            </td>
+                            <td class="drug-manufacturer">-</td>
+                            <td class="drug-form">-</td>
+                            <td class="drug-dosage">-</td>
+                            <td>
+                                <input type="number" class="form-control drug-quantity" 
+                                       name="quantity[]" min="1" value="1" 
+                                       onchange="calculatePrescriptionTotal()">
+                            </td>
+                            <td>
+                                <input type="text" class="form-control drug-instructions" 
+                                       name="instructions[]" 
+                                       placeholder="دستور مصرف">
+                            </td>
+                            <td class="drug-price">0</td>
+                            <td class="drug-total">0</td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionRow(this)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="8" class="text-left"><strong>جمع کل:</strong></td>
+                            <td colspan="2">
+                                <strong id="prescriptionTotalAmount">0</strong> تومان
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="flex-gap mt-3">
+                <button type="button" id="addPrescriptionRow" class="btn btn-secondary">
+                    <i class="fas fa-plus"></i>
+                    افزودن دارو
+                </button>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    ثبت نسخه
+                </button>
+            </div>
+        </form>
+        
+        <!-- Complete Visit -->
+        <form method="POST" action="/doctor/complete/{{ admission.id }}" class="mt-4" onsubmit="return confirm('آیا از اتمام ویزیت اطمینان دارید؟');">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-check-circle"></i>
+                اتمام ویزیت
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

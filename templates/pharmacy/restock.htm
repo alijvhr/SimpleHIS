@@ -1,0 +1,49 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}افزایش موجودی - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">افزایش موجودی داروخانه</h2>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="/pharmacy/restock">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="drug_id" class="form-label">دارو <span style="color: var(--danger);">*</span></label>
+                    <select id="drug_id" name="drug_id" class="form-control" required>
+                        <option value="">انتخاب کنید</option>
+                        {% for drug in drugs %}
+                        <option value="{{ drug.id }}">{{ drug.name }} - {{ drug.manufacturer }} - {{ drug.form }} {{ drug.dosage }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="quantity" class="form-label">تعداد <span style="color: var(--danger);">*</span></label>
+                    <input type="number" id="quantity" name="quantity" class="form-control" 
+                           min="1" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="reason" class="form-label">دلیل <span style="color: var(--danger);">*</span></label>
+                <input type="text" id="reason" name="reason" class="form-control" 
+                       value="خرید جدید" required>
+            </div>
+            
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    ثبت
+                </button>
+                <a href="/pharmacy/inventory" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    انصراف
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,105 @@
+{% extends "layout/base.htm" %}
+
+{% block title %}چاپ نسخه {{ prescription.id }}{% endblock %}
+
+{% block content %}
+<div class="print-container">
+    <div class="prescription-invoice">
+        <!-- Header -->
+        <div class="invoice-header">
+            <div class="invoice-logo">
+                <img src="/static/assets/logo.png" alt="Logo">
+            </div>
+            <h1 class="invoice-title">نسخه دارویی</h1>
+        </div>
+        
+        <!-- Patient & Prescription Info -->
+        <div class="invoice-info">
+            <div>
+                <div class="info-row">
+                    <span class="info-label">شماره نسخه:</span>
+                    <span>{{ prescription.id }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">بیمار:</span>
+                    <span>{{ prescription.patient.full_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">کد ملی:</span>
+                    <span>{{ prescription.patient.national_id }}</span>
+                </div>
+            </div>
+            <div>
+                <div class="info-row">
+                    <span class="info-label">تاریخ:</span>
+                    <span>{{ prescription.created_at.strftime('%Y/%m/%d') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">ساعت:</span>
+                    <span>{{ prescription.created_at.strftime('%H:%M') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">نوع نسخه:</span>
+                    <span>{% if prescription.is_manual %}دستی{% else %}پزشک{% endif %}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Prescription Items Table -->
+        <table class="prescription-table">
+            <thead>
+                <tr>
+                    <th>ردیف</th>
+                    <th>نام دارو</th>
+                    <th>شرکت سازنده</th>
+                    <th>فرم</th>
+                    <th>دوز</th>
+                    <th>تعداد</th>
+                    <th>دستور مصرف</th>
+                    <th>قیمت واحد (تومان)</th>
+                    <th>جمع (تومان)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in prescription.items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ item.drug.name }}</td>
+                    <td>{{ item.drug.manufacturer }}</td>
+                    <td>{{ item.drug.form }}</td>
+                    <td>{{ item.drug.dosage }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.instructions }}</td>
+                    <td>{{ "{:,}".format(item.drug.price|int) }}</td>
+                    <td>{{ "{:,}".format((item.quantity * item.drug.price)|int) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Total -->
+        <div class="invoice-total">
+            <span>جمع کل:</span>
+            <span style="float: left;">{{ "{:,}".format(prescription.total_amount|int) }} تومان</span>
+        </div>
+        
+        <!-- Footer -->
+        <div class="invoice-footer">
+            <p>این نسخه در تاریخ {{ prescription.created_at.strftime('%Y/%m/%d') }} صادر شده است.</p>
+            {% if prescription.dispensed_at %}
+            <p>تاریخ تحویل: {{ prescription.dispensed_at.strftime('%Y/%m/%d %H:%M') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Auto-print on load -->
+<script>
+    window.onload = function() {
+        // Small delay to ensure images are loaded
+        setTimeout(function() {
+            window.print();
+        }, 500);
+    }
+</script>
+{% endblock %}

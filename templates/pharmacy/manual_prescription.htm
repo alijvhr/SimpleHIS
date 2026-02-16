@@ -1,0 +1,161 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}نسخه دستی - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block extra_css %}
+<style>
+.drug-suggestions {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 4px 8px var(--shadow);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    margin-top: 2px;
+    width: 100%;
+}
+
+.suggestion-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+}
+
+.suggestion-item:hover {
+    background: var(--bg);
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">ثبت نسخه دستی</h2>
+    </div>
+    <div class="card-body">
+        {% if not patient %}
+        <!-- Patient Selection -->
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>لطفا ابتدا بیمار را جستجو کنید</span>
+        </div>
+        
+        <form method="GET" action="/pharmacy/manual-prescription">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="national_id" class="form-label">کد ملی بیمار</label>
+                    <input type="text" id="national_id" name="national_id" 
+                           class="form-control" placeholder="جستجو با کد ملی">
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i>
+                        جستجو
+                    </button>
+                </div>
+            </div>
+        </form>
+        
+        {% else %}
+        <!-- Patient Info -->
+        <div class="alert alert-success mb-4">
+            <div class="grid grid-3">
+                <div><strong>بیمار:</strong> {{ patient.full_name }}</div>
+                <div><strong>کد ملی:</strong> {{ patient.national_id }}</div>
+                <div><strong>تلفن:</strong> {{ patient.phone }}</div>
+            </div>
+        </div>
+        
+        <!-- Prescription Form -->
+        <form method="POST" action="/pharmacy/manual-prescription" id="prescriptionForm">
+            <input type="hidden" name="patient_id" value="{{ patient.id }}">
+            <input type="hidden" name="total_amount" value="0">
+            
+            <div class="table-responsive">
+                <table class="table" id="prescriptionTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">#</th>
+                            <th style="width: 250px;">دارو</th>
+                            <th>شرکت سازنده</th>
+                            <th>فرم</th>
+                            <th>دوز</th>
+                            <th style="width: 80px;">تعداد</th>
+                            <th style="width: 200px;">دستور مصرف</th>
+                            <th>قیمت واحد</th>
+                            <th>جمع</th>
+                            <th style="width: 70px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td style="position: relative;">
+                                <input type="text" class="form-control drug-search" 
+                                       name="drug_search_0" 
+                                       placeholder="جستجوی دارو..." 
+                                       autocomplete="off"
+                                       onkeyup="searchDrug(this)">
+                                <input type="hidden" class="drug-id" name="drug_id[]">
+                                <div class="drug-suggestions"></div>
+                            </td>
+                            <td class="drug-manufacturer">-</td>
+                            <td class="drug-form">-</td>
+                            <td class="drug-dosage">-</td>
+                            <td>
+                                <input type="number" class="form-control drug-quantity" 
+                                       name="quantity[]" min="1" value="1" 
+                                       onchange="calculatePrescriptionTotal()">
+                            </td>
+                            <td>
+                                <input type="text" class="form-control drug-instructions" 
+                                       name="instructions[]" 
+                                       placeholder="دستور مصرف">
+                            </td>
+                            <td class="drug-price">0</td>
+                            <td class="drug-total">0</td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionRow(this)">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="8" class="text-left"><strong>جمع کل:</strong></td>
+                            <td colspan="2">
+                                <strong id="prescriptionTotalAmount">0</strong> تومان
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="flex-gap mt-3">
+                <button type="button" id="addPrescriptionRow" class="btn btn-secondary">
+                    <i class="fas fa-plus"></i>
+                    افزودن دارو
+                </button>
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    ثبت نسخه دستی
+                </button>
+                <a href="/pharmacy/inventory" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    انصراف
+                </a>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

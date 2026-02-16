@@ -1,0 +1,89 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}{% if drug %}ویرایش دارو{% else %}ثبت دارو جدید{% endif %} - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{% if drug %}ویرایش دارو{% else %}ثبت دارو جدید{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{% if drug %}/pharmacy/drug/{{ drug.id }}/edit{% else %}/pharmacy/drug/new{% endif %}">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="name" class="form-label">نام دارو <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="name" name="name" class="form-control" 
+                           value="{{ drug.name if drug else '' }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="manufacturer" class="form-label">شرکت سازنده <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="manufacturer" name="manufacturer" class="form-control" 
+                           value="{{ drug.manufacturer if drug else '' }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="form" class="form-label">فرم دارو <span style="color: var(--danger);">*</span></label>
+                    <select id="form" name="form" class="form-control" required>
+                        <option value="">انتخاب کنید</option>
+                        <option value="قرص" {% if drug and drug.form == 'قرص' %}selected{% endif %}>قرص</option>
+                        <option value="کپسول" {% if drug and drug.form == 'کپسول' %}selected{% endif %}>کپسول</option>
+                        <option value="شربت" {% if drug and drug.form == 'شربت' %}selected{% endif %}>شربت</option>
+                        <option value="آمپول" {% if drug and drug.form == 'آمپول' %}selected{% endif %}>آمپول</option>
+                        <option value="قطره" {% if drug and drug.form == 'قطره' %}selected{% endif %}>قطره</option>
+                        <option value="پماد" {% if drug and drug.form == 'پماد' %}selected{% endif %}>پماد</option>
+                        <option value="سایر" {% if drug and drug.form == 'سایر' %}selected{% endif %}>سایر</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="dosage" class="form-label">دوز <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="dosage" name="dosage" class="form-control" 
+                           value="{{ drug.dosage if drug else '' }}" 
+                           placeholder="مثال: 500mg" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="price" class="form-label">قیمت (تومان) <span style="color: var(--danger);">*</span></label>
+                    <input type="number" id="price" name="price" class="form-control" 
+                           value="{{ drug.price if drug else '' }}" 
+                           step="0.01" min="0" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="min_threshold" class="form-label">حداقل موجودی <span style="color: var(--danger);">*</span></label>
+                    <input type="number" id="min_threshold" name="min_threshold" class="form-control" 
+                           value="{{ drug.min_threshold if drug else '10' }}" 
+                           min="0" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="default_instructions" class="form-label">دستور مصرف پیش‌فرض <span style="color: var(--danger);">*</span></label>
+                <textarea id="default_instructions" name="default_instructions" class="form-control" 
+                          rows="3" required>{{ drug.default_instructions if drug else '' }}</textarea>
+                <small class="text-secondary">مثال: روزی ۲ عدد بعد غذا</small>
+            </div>
+            
+            {% if not drug %}
+            <div class="form-group">
+                <label for="initial_stock" class="form-label">موجودی اولیه</label>
+                <input type="number" id="initial_stock" name="initial_stock" class="form-control" 
+                       value="0" min="0">
+            </div>
+            {% endif %}
+            
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    ذخیره
+                </button>
+                <a href="/pharmacy/inventory" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    انصراف
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
