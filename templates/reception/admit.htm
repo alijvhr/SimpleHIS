@@ -1,0 +1,105 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}پذیرش بیمار - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">پذیرش بیمار</h2>
+    </div>
+    <div class="card-body">
+        {% if not patient %}
+        <!-- Patient Selection -->
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>لطفا ابتدا بیمار را جستجو کنید</span>
+        </div>
+        
+        <form method="GET" action="/reception/admit">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="national_id" class="form-label">کد ملی بیمار</label>
+                    <input type="text" id="national_id" name="national_id" 
+                           class="form-control" placeholder="جستجو با کد ملی">
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i>
+                        جستجو
+                    </button>
+                </div>
+            </div>
+        </form>
+        
+        {% else %}
+        <!-- Admission Form -->
+        <div class="alert alert-success mb-3">
+            <i class="fas fa-check-circle"></i>
+            <span>بیمار: {{ patient.full_name }} ({{ patient.national_id }})</span>
+        </div>
+        
+        <form method="POST" action="/reception/admit">
+            <input type="hidden" name="patient_id" value="{{ patient.id }}">
+            
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="admission_type" class="form-label">نوع پذیرش <span style="color: var(--danger);">*</span></label>
+                    <select id="admission_type" name="admission_type" class="form-control" required onchange="toggleRadiologyType(this)">
+                        <option value="">انتخاب کنید</option>
+                        <option value="doctor">ویزیت پزشک</option>
+                        <option value="radiology">رادیولوژی</option>
+                    </select>
+                </div>
+                
+                <div class="form-group" id="radiology_type_group" style="display: none;">
+                    <label for="radiology_type" class="form-label">نوع رادیولوژی</label>
+                    <select id="radiology_type" name="radiology_type" class="form-control">
+                        <option value="">انتخاب کنید</option>
+                        <option value="MRI">MRI - ام آر آی</option>
+                        <option value="CT Scan">CT Scan - سی تی اسکن</option>
+                        <option value="X-Ray">X-Ray - اشعه ایکس</option>
+                        <option value="Ultrasound">Ultrasound - سونوگرافی</option>
+                        <option value="Mammography">Mammography - ماموگرافی</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="description" class="form-label">علت/شرح حال <span style="color: var(--danger);">*</span></label>
+                <textarea id="description" name="description" class="form-control" 
+                          rows="4" required 
+                          placeholder="لطفا علت مراجعه و شرح حال بیمار را وارد کنید..."></textarea>
+            </div>
+            
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check"></i>
+                    ثبت پذیرش
+                </button>
+                <a href="/reception/patients" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    انصراف
+                </a>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function toggleRadiologyType(select) {
+    const radiologyGroup = document.getElementById('radiology_type_group');
+    const radiologySelect = document.getElementById('radiology_type');
+    
+    if (select.value === 'radiology') {
+        radiologyGroup.style.display = 'block';
+        radiologySelect.required = true;
+    } else {
+        radiologyGroup.style.display = 'none';
+        radiologySelect.required = false;
+        radiologySelect.value = '';
+    }
+}
+</script>
+{% endblock %}

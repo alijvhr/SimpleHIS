@@ -1,0 +1,131 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}صندوق - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">صندوق - پرداخت و لغو تراکنش‌ها</h2>
+    </div>
+    <div class="card-body">
+        <h3 class="mb-3">پذیرش‌های در انتظار پرداخت</h3>
+        
+        {% if waiting_admissions %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>شماره</th>
+                    <th>بیمار</th>
+                    <th>نوع</th>
+                    <th>علت/شرح</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ (تومان)</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for admission in waiting_admissions %}
+                <tr>
+                    <td>{{ admission.id }}</td>
+                    <td>{{ admission.patient.full_name }}</td>
+                    <td>
+                        {% if admission.admission_type.value == 'doctor' %}
+                        <span class="badge badge-info">ویزیت پزشک</span>
+                        {% else %}
+                        <span class="badge badge-warning">رادیولوژی - {{ admission.radiology_type }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ admission.description[:50] }}...</td>
+                    <td>{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                    <td>
+                        {% if admission.admission_type.value == 'doctor' %}
+                        50,000
+                        {% else %}
+                        200,000
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="/reception/cashier/pay-admission" style="display: inline;">
+                            <input type="hidden" name="admission_id" value="{{ admission.id }}">
+                            <input type="hidden" name="amount" value="{% if admission.admission_type.value == 'doctor' %}50000{% else %}200000{% endif %}">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="fas fa-money-bill"></i>
+                                پرداخت
+                            </button>
+                        </form>
+                        <form method="POST" action="/reception/cashier/cancel-admission" style="display: inline;" onsubmit="return confirm('آیا از لغو این پذیرش اطمینان دارید؟');">
+                            <input type="hidden" name="admission_id" value="{{ admission.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-times"></i>
+                                لغو
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>پذیرشی در انتظار پرداخت وجود ندارد</span>
+        </div>
+        {% endif %}
+        
+        <h3 class="mt-4 mb-3">نسخه‌های در انتظار پرداخت</h3>
+        
+        {% if waiting_prescriptions %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>شماره نسخه</th>
+                    <th>بیمار</th>
+                    <th>نوع</th>
+                    <th>مبلغ کل (تومان)</th>
+                    <th>تاریخ</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prescription in waiting_prescriptions %}
+                <tr>
+                    <td>{{ prescription.id }}</td>
+                    <td>{{ prescription.patient.full_name }}</td>
+                    <td>
+                        {% if prescription.is_manual %}
+                        <span class="badge badge-warning">نسخه دستی</span>
+                        {% else %}
+                        <span class="badge badge-info">نسخه پزشک</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ "{:,}".format(prescription.total_amount|int) }}</td>
+                    <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                    <td>
+                        <form method="POST" action="/reception/cashier/pay-prescription" style="display: inline;">
+                            <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="fas fa-money-bill"></i>
+                                پرداخت
+                            </button>
+                        </form>
+                        <form method="POST" action="/reception/cashier/cancel-prescription" style="display: inline;" onsubmit="return confirm('آیا از لغو این نسخه اطمینان دارید؟');">
+                            <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-times"></i>
+                                لغو
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>نسخه‌ای در انتظار پرداخت وجود ندارد</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}خانه - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="home-container">
+    <div class="card home-card">
+        <div class="home-logo">
+            <img src="/static/assets/logo.png" alt="Logo">
+        </div>
+        <h1 class="home-welcome">خوش آمدید</h1>
+        <p class="text-center mt-2">{{ current_user.full_name }}</p>
+    </div>
+</div>
+{% endblock %}

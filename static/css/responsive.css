@@ -1,0 +1,111 @@
+/* Responsive Styles */
+
+/* Mobile First - Base styles are for mobile */
+
+/* Tablets and up (768px+) */
+@media (min-width: 768px) {
+    .grid-md-2 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .grid-md-3 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Desktop (1024px+) */
+@media (min-width: 1024px) {
+    .grid-lg-3 {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    
+    .grid-lg-4 {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* Mobile (max 768px) */
+@media (max-width: 768px) {
+    .header {
+        padding: 1rem;
+    }
+    
+    .header-logo {
+        font-size: 1rem;
+    }
+    
+    .header-logo img {
+        height: 30px;
+    }
+    
+    .sidebar {
+        position: fixed;
+        right: -250px;
+        top: 72px;
+        height: calc(100vh - 72px);
+        z-index: 99;
+        transition: right 0.3s ease;
+    }
+    
+    .sidebar.show {
+        right: 0;
+    }
+    
+    .sidebar-toggle {
+        display: block;
+    }
+    
+    .main-content {
+        padding: 1rem;
+    }
+    
+    .card {
+        padding: 1rem;
+    }
+    
+    .login-card {
+        padding: 2rem 1.5rem;
+        margin: 1rem;
+    }
+    
+    .grid-2,
+    .grid-3,
+    .grid-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .table {
+        font-size: 0.875rem;
+    }
+    
+    .table th,
+    .table td {
+        padding: 0.5rem;
+    }
+    
+    /* Stack buttons on mobile */
+    .btn-block-mobile {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Small mobile (max 480px) */
+@media (max-width: 480px) {
+    .home-welcome {
+        font-size: 1.5rem;
+    }
+    
+    .home-logo img {
+        height: 80px;
+    }
+    
+    .card-title {
+        font-size: 1.25rem;
+    }
+    
+    /* Hide table columns on very small screens */
+    .table .hide-mobile {
+        display: none;
+    }
+}

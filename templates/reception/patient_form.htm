@@ -1,0 +1,70 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}{% if patient %}ویرایش بیمار{% else %}ثبت بیمار جدید{% endif %} - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{% if patient %}ویرایش بیمار{% else %}ثبت بیمار جدید{% endif %}</h2>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{% if patient %}/reception/patients/{{ patient.id }}/edit{% else %}/reception/patients/new{% endif %}">
+            <div class="grid grid-2">
+                <div class="form-group">
+                    <label for="national_id" class="form-label">کد ملی <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="national_id" name="national_id" 
+                           class="form-control" value="{{ patient.national_id if patient else '' }}" 
+                           required {% if patient %}readonly{% endif %}>
+                </div>
+                
+                <div class="form-group">
+                    <label for="full_name" class="form-label">نام و نام خانوادگی <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="full_name" name="full_name" 
+                           class="form-control" value="{{ patient.full_name if patient else '' }}" 
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone" class="form-label">تلفن <span style="color: var(--danger);">*</span></label>
+                    <input type="text" id="phone" name="phone" 
+                           class="form-control" value="{{ patient.phone if patient else '' }}" 
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="birth_date" class="form-label">تاریخ تولد <span style="color: var(--danger);">*</span></label>
+                    <input type="date" id="birth_date" name="birth_date" 
+                           class="form-control" value="{{ patient.birth_date if patient else '' }}" 
+                           required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="gender" class="form-label">جنسیت <span style="color: var(--danger);">*</span></label>
+                    <select id="gender" name="gender" class="form-control" required>
+                        <option value="">انتخاب کنید</option>
+                        <option value="male" {% if patient and patient.gender.value == 'male' %}selected{% endif %}>مرد</option>
+                        <option value="female" {% if patient and patient.gender.value == 'female' %}selected{% endif %}>زن</option>
+                        <option value="other" {% if patient and patient.gender.value == 'other' %}selected{% endif %}>سایر</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="address" class="form-label">آدرس</label>
+                    <textarea id="address" name="address" class="form-control">{{ patient.address if patient else '' }}</textarea>
+                </div>
+            </div>
+            
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    {% if patient %}ذخیره تغییرات{% else %}ثبت بیمار{% endif %}
+                </button>
+                <a href="/reception/patients" class="btn btn-secondary">
+                    <i class="fas fa-times"></i>
+                    انصراف
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
