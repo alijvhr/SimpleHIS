@@ -100,11 +100,23 @@ async def create_patient(
         address=address,
         created_by=current_user.id
     )
-    
-    db.add(patient)
-    db.commit()
-    db.refresh(patient)
-    
+
+    try:
+        db.add(patient)
+        db.commit()
+        db.refresh(patient)
+    except Exception:
+        db.rollback()
+        return templates.TemplateResponse(
+            "reception/patient_form.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "patients",
+                "patient": None,
+                "messages": [{"type": "danger", "text": "خطا در ذخیره‌سازی بیمار. لطفاً بعداً دوباره تلاش کنید."}]
+            }
+        )
     return RedirectResponse(url=f"/reception/admit?patient_id={patient.id}", status_code=302)
 
 @router.get("/admit", response_class=HTMLResponse)
