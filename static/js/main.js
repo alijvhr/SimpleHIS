@@ -146,13 +146,58 @@ function showDrugSuggestions(input, drugs) {
         return;
     }
     
-    suggestionsDiv.innerHTML = drugs.map(drug => `
-        <div class="suggestion-item" onclick="selectDrug(this, ${JSON.stringify(drug).replace(/"/g, '&quot;')})">
-            <strong>${drug.name}</strong> - ${drug.manufacturer} - ${drug.form} ${drug.dosage}
-        </div>
-    `).join('');
+    // Create suggestions using data attributes instead of inline JSON
+    suggestionsDiv.innerHTML = drugs.map(drug => {
+        const div = document.createElement('div');
+        div.className = 'suggestion-item';
+        div.setAttribute('data-drug-id', drug.id);
+        div.setAttribute('data-drug-name', drug.name);
+        div.setAttribute('data-drug-manufacturer', drug.manufacturer);
+        div.setAttribute('data-drug-form', drug.form);
+        div.setAttribute('data-drug-dosage', drug.dosage);
+        div.setAttribute('data-drug-price', drug.price);
+        div.setAttribute('data-drug-instructions', drug.default_instructions);
+        
+        // Safely set text content (prevents XSS)
+        const strong = document.createElement('strong');
+        strong.textContent = drug.name;
+        div.appendChild(strong);
+        div.appendChild(document.createTextNode(` - ${drug.manufacturer} - ${drug.form} ${drug.dosage}`));
+        
+        div.onclick = function() { selectDrugSafe(this); };
+        
+        return div.outerHTML;
+    }).join('');
     
     suggestionsDiv.style.display = 'block';
+}
+
+function selectDrugSafe(element) {
+    // Extract drug data from data attributes (safe from XSS)
+    const drugData = {
+        id: element.getAttribute('data-drug-id'),
+        name: element.getAttribute('data-drug-name'),
+        manufacturer: element.getAttribute('data-drug-manufacturer'),
+        form: element.getAttribute('data-drug-form'),
+        dosage: element.getAttribute('data-drug-dosage'),
+        price: element.getAttribute('data-drug-price'),
+        default_instructions: element.getAttribute('data-drug-instructions')
+    };
+    
+    const row = element.closest('.prescription-row');
+    const drugNameInput = row.querySelector('.drug-name');
+    const drugIdInput = row.querySelector('.drug-id');
+    const instructionsInput = row.querySelector('.drug-instructions');
+    const priceInput = row.querySelector('.drug-price');
+    
+    // Set values safely using textContent/value properties
+    drugNameInput.value = drugData.name;
+    drugIdInput.value = drugData.id;
+    instructionsInput.value = drugData.default_instructions;
+    priceInput.value = drugData.price;
+    
+    hideSuggestions(drugNameInput);
+    calculateTotal();
 }
 
 function hideSuggestions(input) {
@@ -161,34 +206,6 @@ function hideSuggestions(input) {
         suggestionsDiv.style.display = 'none';
         suggestionsDiv.innerHTML = '';
     }
-}
-
-function selectDrug(element, drug) {
-    const row = element.closest('tr');
-    
-    // Set drug ID
-    row.querySelector('.drug-id').value = drug.id;
-    
-    // Set drug search value
-    row.querySelector('.drug-search').value = drug.name;
-    
-    // Fill drug details
-    row.querySelector('.drug-manufacturer').textContent = drug.manufacturer;
-    row.querySelector('.drug-form').textContent = drug.form;
-    row.querySelector('.drug-dosage').textContent = drug.dosage;
-    row.querySelector('.drug-price').textContent = drug.price;
-    row.querySelector('.drug-instructions').value = drug.default_instructions;
-    
-    // Calculate row total
-    const quantity = parseInt(row.querySelector('.drug-quantity').value) || 1;
-    const price = parseFloat(drug.price) || 0;
-    row.querySelector('.drug-total').textContent = (quantity * price).toFixed(2);
-    
-    // Hide suggestions
-    hideSuggestions(row.querySelector('.drug-search'));
-    
-    // Calculate total
-    calculatePrescriptionTotal();
 }
 
 function calculatePrescriptionTotal() {

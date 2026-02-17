@@ -142,28 +142,72 @@ async def update_user(
 
 @router.post("/users/{user_id}/deactivate")
 async def deactivate_user(
+    request: Request,
     user_id: int,
     current_user: User = Depends(require_role(['admin'])),
     db: Session = Depends(get_db)
 ):
     """Deactivate user"""
     user = db.query(User).filter(User.id == user_id).first()
-    if user and user.id != current_user.id:  # Can't deactivate self
-        user.is_active = False
-        db.commit()
+    
+    if not user:
+        # User not found - redirect with error
+        users = db.query(User).all()
+        return templates.TemplateResponse(
+            "admin/users.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "users",
+                "users": users,
+                "messages": [{"type": "danger", "text": "کاربر مورد نظر یافت نشد"}]
+            }
+        )
+    
+    if user.id == current_user.id:
+        # Cannot deactivate self
+        users = db.query(User).all()
+        return templates.TemplateResponse(
+            "admin/users.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "users",
+                "users": users,
+                "messages": [{"type": "danger", "text": "نمی‌توانید حساب کاربری خود را غیرفعال کنید"}]
+            }
+        )
+    
+    user.is_active = False
+    db.commit()
     
     return RedirectResponse(url="/admin/users", status_code=302)
 
 @router.post("/users/{user_id}/activate")
 async def activate_user(
+    request: Request,
     user_id: int,
     current_user: User = Depends(require_role(['admin'])),
     db: Session = Depends(get_db)
 ):
     """Activate user"""
     user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user.is_active = True
-        db.commit()
+    
+    if not user:
+        # User not found - redirect with error
+        users = db.query(User).all()
+        return templates.TemplateResponse(
+            "admin/users.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "users",
+                "users": users,
+                "messages": [{"type": "danger", "text": "کاربر مورد نظر یافت نشد"}]
+            }
+        )
+    
+    user.is_active = True
+    db.commit()
     
     return RedirectResponse(url="/admin/users", status_code=302)

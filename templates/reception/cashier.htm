@@ -37,17 +37,11 @@
                     </td>
                     <td>{{ admission.description|truncate(50) }}</td>
                     <td>{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>
-                        {% if admission.admission_type.value == 'doctor' %}
-                        50,000
-                        {% else %}
-                        200,000
-                        {% endif %}
-                    </td>
+                    <td>{{ "{:,}".format(admission.price) }}</td>
                     <td>
                         <form method="POST" action="/reception/cashier/pay-admission" style="display: inline;">
                             <input type="hidden" name="admission_id" value="{{ admission.id }}">
-                            <input type="hidden" name="amount" value="{% if admission.admission_type.value == 'doctor' %}50000{% else %}200000{% endif %}">
+                            <input type="hidden" name="amount" value="{{ admission.price }}">
                             <button type="submit" class="btn btn-success btn-sm">
                                 <i class="fas fa-money-bill"></i>
                                 پرداخت

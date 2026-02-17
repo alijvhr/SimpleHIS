@@ -314,30 +314,64 @@ async def dispense_detail(
 
 @router.post("/dispense/{prescription_id}/complete")
 async def complete_dispense(
+    request: Request,
     prescription_id: int,
     current_user: User = Depends(require_role(['admin', 'pharmacy'])),
     db: Session = Depends(get_db)
 ):
-    """Complete prescription dispensing"""
-    prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
+    """Complete prescription dispensing with stock locking"""
+    # Use database transaction with FOR UPDATE to prevent race conditions
+    prescription = db.query(Prescription).filter(
+        Prescription.id == prescription_id
+    ).with_for_update().first()
     
-    if prescription and prescription.status == PrescriptionStatus.paid:
-        # Reduce stock for each item
-        for item in prescription.items:
-            stock_tx = StockTransaction(
-                drug_id=item.drug_id,
-                quantity_change=-item.quantity,
-                reason=f"تحویل نسخه {prescription_id}",
-                created_by=current_user.id
-            )
-            db.add(stock_tx)
+    if not prescription or prescription.status != PrescriptionStatus.paid:
+        return RedirectResponse(url="/pharmacy/dispense", status_code=302)
+    
+    # Check stock availability within the transaction
+    stock_errors = []
+    for item in prescription.items:
+        # Lock the drug rows to prevent concurrent modifications
+        current_stock = db.query(func.sum(StockTransaction.quantity_change)).filter(
+            StockTransaction.drug_id == item.drug_id
+        ).scalar() or 0
         
-        # Update prescription status
-        prescription.status = PrescriptionStatus.dispensed
-        prescription.dispensed_at = datetime.now(timezone.utc)
-        prescription.dispensed_by = current_user.id
-        
-        db.commit()
+        if current_stock < item.quantity:
+            stock_errors.append(f"{item.drug.name}: موجودی ناکافی")
+    
+    # If insufficient stock, rollback and return error
+    if stock_errors:
+        db.rollback()
+        prescriptions = db.query(Prescription).filter(
+            Prescription.status == PrescriptionStatus.paid
+        ).all()
+        return templates.TemplateResponse(
+            "pharmacy/dispense.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "dispense",
+                "prescriptions": prescriptions,
+                "messages": [{"type": "danger", "text": "<br>".join(stock_errors)}]
+            }
+        )
+    
+    # Reduce stock for each item (within the locked transaction)
+    for item in prescription.items:
+        stock_tx = StockTransaction(
+            drug_id=item.drug_id,
+            quantity_change=-item.quantity,
+            reason=f"تحویل نسخه {prescription_id}",
+            created_by=current_user.id
+        )
+        db.add(stock_tx)
+    
+    # Update prescription status
+    prescription.status = PrescriptionStatus.dispensed
+    prescription.dispensed_at = datetime.now(timezone.utc)
+    prescription.dispensed_by = current_user.id
+    
+    db.commit()
     
     return RedirectResponse(url="/pharmacy/dispense", status_code=302)
 

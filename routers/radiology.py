@@ -11,6 +11,7 @@ from models.user import User
 from models.admission import Admission, AdmissionStatus, AdmissionType
 from models.radiology import RadiologyReport, RadiologyImage
 from auth import require_auth, require_role
+from utils.validators import validate_image_file
 
 router = APIRouter(prefix="/radiology", tags=["radiology"])
 templates = Jinja2Templates(directory="templates")
@@ -72,6 +73,40 @@ async def create_report(
     db: Session = Depends(get_db)
 ):
     """Create radiology report"""
+    # Handle image uploads with validation
+    upload_errors = []
+    if images and images[0].filename:
+        for image_file in images:
+            if image_file and image_file.filename:
+                # Read file content to get size
+                content = await image_file.read()
+                file_size = len(content)
+                
+                # Validate image
+                is_valid, error_msg = validate_image_file(
+                    image_file.filename,
+                    image_file.content_type,
+                    file_size
+                )
+                
+                if not is_valid:
+                    upload_errors.append(f"{image_file.filename}: {error_msg}")
+                    continue
+                
+    # If there are validation errors, return to form
+    if upload_errors:
+        admission = db.query(Admission).filter(Admission.id == admission_id).first()
+        return templates.TemplateResponse(
+            "radiology/report_form.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "admissions",
+                "admission": admission,
+                "messages": [{"type": "danger", "text": "<br>".join(upload_errors)}]
+            }
+        )
+    
     # Create report
     report = RadiologyReport(
         admission_id=admission_id,
@@ -82,18 +117,21 @@ async def create_report(
     db.add(report)
     db.flush()
     
-    # Handle image uploads
+    # Save validated images
     if images and images[0].filename:
         for image_file in images:
             if image_file and image_file.filename:
+                # Re-read content (it was consumed during validation)
+                await image_file.seek(0)
+                content = await image_file.read()
+                
                 # Generate unique filename
-                ext = os.path.splitext(image_file.filename)[1]
+                ext = os.path.splitext(image_file.filename)[1].lower()
                 filename = f"{uuid.uuid4()}{ext}"
                 filepath = os.path.join(UPLOAD_DIR, filename)
                 
                 # Save file
                 with open(filepath, "wb") as f:
-                    content = await image_file.read()
                     f.write(content)
                 
                 # Create image record

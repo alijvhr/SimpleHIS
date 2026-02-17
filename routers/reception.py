@@ -10,6 +10,8 @@ from models.admission import Admission, AdmissionType, AdmissionStatus
 from models.payment import Payment, PayableType, PaymentStatus
 from models.prescription import Prescription, PrescriptionStatus
 from auth import require_auth, require_role
+from utils.validators import validate_iranian_national_id
+from config import get_admission_price
 
 router = APIRouter(prefix="/reception", tags=["reception"])
 templates = Jinja2Templates(directory="templates")
@@ -71,6 +73,19 @@ async def create_patient(
     db: Session = Depends(get_db)
 ):
     """Create new patient"""
+    # Validate national ID format
+    if not validate_iranian_national_id(national_id):
+        return templates.TemplateResponse(
+            "reception/patient_form.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "patients",
+                "patient": None,
+                "messages": [{"type": "danger", "text": "کد ملی وارد شده نامعتبر است"}]
+            }
+        )
+    
     # Check if patient already exists
     existing = db.query(Patient).filter(Patient.national_id == national_id).first()
     if existing:
@@ -178,6 +193,10 @@ async def cashier(
     waiting_prescriptions = db.query(Prescription).filter(
         Prescription.status == PrescriptionStatus.waiting_payment
     ).all()
+    
+    # Add prices to admissions
+    for admission in waiting_admissions:
+        admission.price = get_admission_price(admission.admission_type.value)
     
     messages = getattr(request.state, 'messages', [])
     
