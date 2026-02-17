@@ -1,0 +1,39 @@
+{% extends "layout/base.htm" %}
+
+{% block title %}ورود - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-logo">
+            <img src="/static/assets/logo.png" alt="Logo">
+        </div>
+        
+        <h1 class="login-title">ورود به سیستم</h1>
+        
+        {% if error %}
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>{{ error }}</span>
+        </div>
+        {% endif %}
+        
+        <form method="POST" action="/login">
+            <div class="form-group">
+                <label for="username" class="form-label">نام کاربری</label>
+                <input type="text" id="username" name="username" class="form-control" required autofocus>
+            </div>
+            
+            <div class="form-group">
+                <label for="password" class="form-label">رمز عبور</label>
+                <input type="password" id="password" name="password" class="form-control" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary btn-block">
+                <i class="fas fa-sign-in-alt"></i>
+                ورود
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

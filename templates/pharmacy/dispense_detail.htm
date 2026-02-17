@@ -1,0 +1,93 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}جزئیات نسخه - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">جزئیات نسخه شماره {{ prescription.id }}</h2>
+    </div>
+    <div class="card-body">
+        <!-- Patient Info -->
+        <div class="grid grid-3 mb-4">
+            <div><strong>بیمار:</strong> {{ prescription.patient.full_name }}</div>
+            <div><strong>کد ملی:</strong> {{ prescription.patient.national_id }}</div>
+            <div><strong>تلفن:</strong> {{ prescription.patient.phone }}</div>
+        </div>
+        
+        <!-- Prescription Items -->
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ردیف</th>
+                    <th>نام دارو</th>
+                    <th>شرکت</th>
+                    <th>فرم</th>
+                    <th>دوز</th>
+                    <th>تعداد</th>
+                    <th>دستور مصرف</th>
+                    <th>قیمت واحد</th>
+                    <th>جمع</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in prescription.items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ item.drug.name }}</td>
+                    <td>{{ item.drug.manufacturer }}</td>
+                    <td>{{ item.drug.form }}</td>
+                    <td>{{ item.drug.dosage }}</td>
+                    <td>{{ item.quantity }}</td>
+                    <td>{{ item.instructions }}</td>
+                    <td>{{ "{:,}".format(item.drug.price|int) }}</td>
+                    <td>{{ "{:,}".format((item.quantity * item.drug.price)|int) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="8" class="text-left"><strong>جمع کل:</strong></td>
+                    <td><strong>{{ "{:,}".format(prescription.total_amount|int) }} تومان</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+        
+        <!-- Stock Warnings -->
+        {% if stock_warnings %}
+        <div class="alert alert-warning mt-3">
+            <i class="fas fa-exclamation-triangle"></i>
+            <strong>هشدار موجودی:</strong>
+            <ul class="mt-2">
+                {% for warning in stock_warnings %}
+                <li>{{ warning }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        <!-- Actions -->
+        <div class="flex-gap mt-4">
+            {% if prescription.status.value == 'paid' and not stock_warnings %}
+            <form method="POST" action="/pharmacy/dispense/{{ prescription.id }}/complete" 
+                  onsubmit="return confirm('آیا از تحویل این نسخه اطمینان دارید؟');">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check"></i>
+                    تایید و تحویل
+                </button>
+            </form>
+            {% endif %}
+            
+            <button onclick="printPrescription({{ prescription.id }})" class="btn btn-secondary">
+                <i class="fas fa-print"></i>
+                چاپ نسخه
+            </button>
+            
+            <a href="/pharmacy/dispense" class="btn btn-secondary">
+                <i class="fas fa-arrow-right"></i>
+                بازگشت
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}تحویل نسخه - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">نسخه‌های پرداخت شده آماده تحویل</h2>
+    </div>
+    <div class="card-body">
+        {% if prescriptions %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>شماره نسخه</th>
+                    <th>بیمار</th>
+                    <th>نوع</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prescription in prescriptions %}
+                <tr>
+                    <td>{{ prescription.id }}</td>
+                    <td>{{ prescription.patient.full_name }}</td>
+                    <td>
+                        {% if prescription.is_manual %}
+                        <span class="badge badge-warning">نسخه دستی</span>
+                        {% else %}
+                        <span class="badge badge-info">نسخه پزشک</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                    <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
+                    <td>
+                        <a href="/pharmacy/dispense/{{ prescription.id }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye"></i>
+                            جزئیات و تحویل
+                        </a>
+                        <button onclick="printPrescription({{ prescription.id }})" class="btn btn-sm btn-secondary">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>نسخه‌ای آماده تحویل وجود ندارد</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

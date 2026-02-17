@@ -1,0 +1,51 @@
+/* CSS Variables for Light and Dark Mode */
+:root {
+    --bg: #efefef;           /* Very light gray background */
+    --primary: #3698d4;      /* Main blue */
+    --primary-hover: #2880ba;
+    --text: #333;
+    --text-secondary: #666;
+    --card-bg: #ffffff;
+    --border: #ddd;
+    --success: #28a745;
+    --success-hover: #218838;
+    --danger: #dc3545;
+    --danger-hover: #c82333;
+    --warning: #ffc107;
+    --info: #17a2b8;
+    --shadow: rgba(0, 0, 0, 0.1);
+    --shadow-hover: rgba(0, 0, 0, 0.15);
+    --input-bg: #fff;
+    --input-border: #ccc;
+    --input-focus: #3698d4;
+    --sidebar-bg: #2c3e50;
+    --sidebar-text: #ecf0f1;
+    --sidebar-hover: #34495e;
+    --header-bg: #fff;
+    --transition: all 0.3s ease;
+}
+
+body.dark {
+    --bg: #121212;
+    --primary: #3698d4;
+    --primary-hover: #2880ba;
+    --text: #e0e0e0;
+    --text-secondary: #aaa;
+    --card-bg: #1e1e1e;
+    --border: #333;
+    --success: #4caf50;
+    --success-hover: #45a049;
+    --danger: #f44336;
+    --danger-hover: #da190b;
+    --warning: #ff9800;
+    --info: #2196f3;
+    --shadow: rgba(0, 0, 0, 0.3);
+    --shadow-hover: rgba(0, 0, 0, 0.4);
+    --input-bg: #2a2a2a;
+    --input-border: #444;
+    --input-focus: #3698d4;
+    --sidebar-bg: #1a1a1a;
+    --sidebar-text: #e0e0e0;
+    --sidebar-hover: #2a2a2a;
+    --header-bg: #1e1e1e;
+}

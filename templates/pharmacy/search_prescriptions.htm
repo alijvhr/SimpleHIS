@@ -1,0 +1,99 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}جستجوی نسخه - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">جستجوی نسخه‌ها</h2>
+    </div>
+    <div class="card-body">
+        <!-- Search Form -->
+        <form method="GET" action="/pharmacy/search">
+            <div class="grid grid-3">
+                <div class="form-group">
+                    <label for="prescription_id" class="form-label">شماره نسخه</label>
+                    <input type="number" id="prescription_id" name="prescription_id" 
+                           class="form-control" value="{{ prescription_id or '' }}" 
+                           placeholder="شماره نسخه">
+                </div>
+                <div class="form-group">
+                    <label for="national_id" class="form-label">کد ملی بیمار</label>
+                    <input type="text" id="national_id" name="national_id" 
+                           class="form-control" value="{{ national_id or '' }}" 
+                           placeholder="کد ملی">
+                </div>
+                <div class="form-group">
+                    <label>&nbsp;</label>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i>
+                        جستجو
+                    </button>
+                </div>
+            </div>
+        </form>
+        
+        <!-- Search Results -->
+        {% if prescriptions %}
+        <h3 class="mt-4 mb-3">نتایج جستجو</h3>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>شماره نسخه</th>
+                    <th>بیمار</th>
+                    <th>کد ملی</th>
+                    <th>نوع</th>
+                    <th>تاریخ</th>
+                    <th>مبلغ</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for prescription in prescriptions %}
+                <tr>
+                    <td>{{ prescription.id }}</td>
+                    <td>{{ prescription.patient.full_name }}</td>
+                    <td>{{ prescription.patient.national_id }}</td>
+                    <td>
+                        {% if prescription.is_manual %}
+                        <span class="badge badge-warning">دستی</span>
+                        {% else %}
+                        <span class="badge badge-info">پزشک</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                    <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
+                    <td>
+                        {% if prescription.status.value == 'dispensed' %}
+                        <span class="badge badge-success">تحویل شده</span>
+                        {% elif prescription.status.value == 'paid' %}
+                        <span class="badge badge-info">پرداخت شده</span>
+                        {% elif prescription.status.value == 'cancelled' %}
+                        <span class="badge badge-danger">لغو شده</span>
+                        {% else %}
+                        <span class="badge badge-warning">در انتظار پرداخت</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="/pharmacy/prescription/{{ prescription.id }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye"></i>
+                            جزئیات
+                        </a>
+                        <button onclick="printPrescription({{ prescription.id }})" class="btn btn-sm btn-secondary">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% elif prescription_id or national_id %}
+        <div class="alert alert-info mt-4">
+            <i class="fas fa-info-circle"></i>
+            <span>نسخه‌ای یافت نشد</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

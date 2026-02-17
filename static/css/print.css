@@ -1,0 +1,121 @@
+/* Print Styles for Prescription Invoice */
+
+@media print {
+    /* Hide non-printable elements */
+    .header,
+    .sidebar,
+    .no-print,
+    button,
+    .btn {
+        display: none !important;
+    }
+    
+    /* Reset page layout */
+    body {
+        background: white;
+        color: black;
+        font-size: 12pt;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .main-content {
+        padding: 0;
+        width: 100%;
+    }
+    
+    /* Print container */
+    .print-container {
+        width: 100%;
+        max-width: 100%;
+        padding: 20mm;
+    }
+    
+    /* Prescription invoice */
+    .prescription-invoice {
+        border: 2px solid #000;
+        padding: 15mm;
+        page-break-inside: avoid;
+    }
+    
+    .invoice-header {
+        text-align: center;
+        border-bottom: 2px solid #000;
+        padding-bottom: 10mm;
+        margin-bottom: 10mm;
+    }
+    
+    .invoice-logo img {
+        height: 30mm;
+    }
+    
+    .invoice-title {
+        font-size: 18pt;
+        font-weight: bold;
+        margin: 5mm 0;
+    }
+    
+    .invoice-info {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5mm;
+        margin-bottom: 10mm;
+    }
+    
+    .info-row {
+        display: flex;
+        padding: 2mm 0;
+    }
+    
+    .info-label {
+        font-weight: bold;
+        margin-left: 3mm;
+    }
+    
+    /* Prescription table */
+    .prescription-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10mm 0;
+    }
+    
+    .prescription-table th,
+    .prescription-table td {
+        border: 1px solid #000;
+        padding: 3mm;
+        text-align: right;
+    }
+    
+    .prescription-table th {
+        background: #f0f0f0;
+        font-weight: bold;
+    }
+    
+    .invoice-total {
+        text-align: left;
+        font-size: 14pt;
+        font-weight: bold;
+        margin-top: 10mm;
+        padding: 5mm;
+        border-top: 2px solid #000;
+    }
+    
+    .invoice-footer {
+        margin-top: 15mm;
+        text-align: center;
+        font-size: 10pt;
+        color: #666;
+    }
+    
+    /* Ensure page breaks */
+    .page-break {
+        page-break-after: always;
+    }
+    
+    /* Card styles for print */
+    .card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+        page-break-inside: avoid;
+    }
+}

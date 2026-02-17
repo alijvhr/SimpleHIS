@@ -1,0 +1,68 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}موجودی داروخانه - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">موجودی داروخانه</h2>
+        <div class="flex-gap">
+            <a href="/pharmacy/drug/new" class="btn btn-success">
+                <i class="fas fa-plus"></i>
+                دارو جدید
+            </a>
+            <a href="/pharmacy/restock" class="btn btn-primary">
+                <i class="fas fa-box"></i>
+                افزایش موجودی
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if drugs %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>نام دارو</th>
+                    <th>شرکت سازنده</th>
+                    <th>فرم</th>
+                    <th>دوز</th>
+                    <th>قیمت (تومان)</th>
+                    <th>موجودی</th>
+                    <th>حداقل موجودی</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in drugs %}
+                <tr {% if item.stock < item.drug.min_threshold %}class="low-stock"{% endif %}>
+                    <td>{{ item.drug.name }}</td>
+                    <td>{{ item.drug.manufacturer }}</td>
+                    <td>{{ item.drug.form }}</td>
+                    <td>{{ item.drug.dosage }}</td>
+                    <td>{{ "{:,}".format(item.drug.price|int) }}</td>
+                    <td>
+                        {% if item.stock < item.drug.min_threshold %}
+                        <span class="badge badge-danger">{{ item.stock }}</span>
+                        {% else %}
+                        {{ item.stock }}
+                        {% endif %}
+                    </td>
+                    <td>{{ item.drug.min_threshold }}</td>
+                    <td>
+                        <a href="/pharmacy/drug/{{ item.drug.id }}/edit" class="btn btn-sm btn-primary">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>هیچ داروی ثبت شده‌ای وجود ندارد</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

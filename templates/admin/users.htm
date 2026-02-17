@@ -1,0 +1,90 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}مدیریت کاربران - سیستم اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">مدیریت کاربران</h2>
+        <a href="/admin/users/new" class="btn btn-success">
+            <i class="fas fa-user-plus"></i>
+            کاربر جدید
+        </a>
+    </div>
+    <div class="card-body">
+        {% if users %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>شناسه</th>
+                    <th>نام کاربری</th>
+                    <th>نام کامل</th>
+                    <th>نقش</th>
+                    <th>وضعیت</th>
+                    <th>تاریخ ایجاد</th>
+                    <th>عملیات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.full_name }}</td>
+                    <td>
+                        {% if user.role.value == 'admin' %}
+                        <span class="badge badge-danger">مدیرکل</span>
+                        {% elif user.role.value == 'doctor' %}
+                        <span class="badge badge-info">پزشک</span>
+                        {% elif user.role.value == 'reception' %}
+                        <span class="badge badge-primary">پذیرش</span>
+                        {% elif user.role.value == 'radiologist' %}
+                        <span class="badge badge-warning">رادیولوژیست</span>
+                        {% elif user.role.value == 'pharmacy' %}
+                        <span class="badge badge-success">داروخانه</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_active %}
+                        <span class="badge badge-success">فعال</span>
+                        {% else %}
+                        <span class="badge badge-secondary">غیرفعال</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%Y/%m/%d') }}</td>
+                    <td>
+                        <a href="/admin/users/{{ user.id }}/edit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-edit"></i>
+                            ویرایش
+                        </a>
+                        {% if user.is_active %}
+                        <form method="POST" action="/admin/users/{{ user.id }}/deactivate" 
+                              style="display: inline;" 
+                              onsubmit="return confirm('آیا از غیرفعال کردن این کاربر اطمینان دارید؟');">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-ban"></i>
+                                غیرفعال
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="/admin/users/{{ user.id }}/activate" style="display: inline;">
+                            <button type="submit" class="btn btn-success btn-sm">
+                                <i class="fas fa-check"></i>
+                                فعال
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>کاربری ثبت نشده است</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
