@@ -331,10 +331,10 @@ async def complete_dispense(
     # Check stock availability within the transaction
     stock_errors = []
     for item in prescription.items:
-        # Lock the drug rows to prevent concurrent modifications
+        # Lock the stock transaction rows to prevent concurrent modifications
         current_stock = db.query(func.sum(StockTransaction.quantity_change)).filter(
             StockTransaction.drug_id == item.drug_id
-        ).scalar() or 0
+        ).with_for_update().scalar() or 0
         
         if current_stock < item.quantity:
             stock_errors.append(f"{item.drug.name}: موجودی ناکافی")

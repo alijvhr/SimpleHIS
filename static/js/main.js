@@ -146,8 +146,11 @@ function showDrugSuggestions(input, drugs) {
         return;
     }
     
-    // Create suggestions using data attributes instead of inline JSON
-    suggestionsDiv.innerHTML = drugs.map(drug => {
+    // Clear previous suggestions
+    suggestionsDiv.innerHTML = '';
+    
+    // Create suggestions using data attributes and DOM manipulation (XSS-safe)
+    drugs.forEach(drug => {
         const div = document.createElement('div');
         div.className = 'suggestion-item';
         div.setAttribute('data-drug-id', drug.id);
@@ -162,12 +165,22 @@ function showDrugSuggestions(input, drugs) {
         const strong = document.createElement('strong');
         strong.textContent = drug.name;
         div.appendChild(strong);
-        div.appendChild(document.createTextNode(` - ${drug.manufacturer} - ${drug.form} ${drug.dosage}`));
+        
+        // Add remaining text safely
+        const text1 = document.createTextNode(' - ');
+        const manuf = document.createTextNode(drug.manufacturer);
+        const text2 = document.createTextNode(' - ');
+        const formDosage = document.createTextNode(drug.form + ' ' + drug.dosage);
+        
+        div.appendChild(text1);
+        div.appendChild(manuf);
+        div.appendChild(text2);
+        div.appendChild(formDosage);
         
         div.onclick = function() { selectDrugSafe(this); };
         
-        return div.outerHTML;
-    }).join('');
+        suggestionsDiv.appendChild(div);
+    });
     
     suggestionsDiv.style.display = 'block';
 }

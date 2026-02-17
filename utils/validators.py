@@ -42,9 +42,11 @@ def validate_image_file(filename: str, content_type: str, file_size: int) -> tup
     Validate image file.
     Returns (is_valid, error_message)
     """
-    # Check file extension
-    ext = filename.lower().split('.')[-1] if '.' in filename else ''
-    if f'.{ext}' not in ALLOWED_IMAGE_EXTENSIONS:
+    import os
+    
+    # Check file extension using os.path.splitext for reliability
+    ext = os.path.splitext(filename)[1].lower()
+    if not ext or ext not in ALLOWED_IMAGE_EXTENSIONS:
         return False, "فقط فایل‌های تصویری مجاز هستند (JPG, PNG, GIF, BMP, WEBP)"
     
     # Check MIME type

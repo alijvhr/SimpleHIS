@@ -75,10 +75,12 @@ async def create_report(
     """Create radiology report"""
     # Handle image uploads with validation
     upload_errors = []
+    validated_files = []  # Store validated file content to avoid re-reading
+    
     if images and images[0].filename:
         for image_file in images:
             if image_file and image_file.filename:
-                # Read file content to get size
+                # Read file content once
                 content = await image_file.read()
                 file_size = len(content)
                 
@@ -91,7 +93,9 @@ async def create_report(
                 
                 if not is_valid:
                     upload_errors.append(f"{image_file.filename}: {error_msg}")
-                    continue
+                else:
+                    # Store validated file data
+                    validated_files.append((image_file.filename, content))
                 
     # If there are validation errors, return to form
     if upload_errors:
@@ -117,29 +121,23 @@ async def create_report(
     db.add(report)
     db.flush()
     
-    # Save validated images
-    if images and images[0].filename:
-        for image_file in images:
-            if image_file and image_file.filename:
-                # Re-read content (it was consumed during validation)
-                await image_file.seek(0)
-                content = await image_file.read()
-                
-                # Generate unique filename
-                ext = os.path.splitext(image_file.filename)[1].lower()
-                filename = f"{uuid.uuid4()}{ext}"
-                filepath = os.path.join(UPLOAD_DIR, filename)
-                
-                # Save file
-                with open(filepath, "wb") as f:
-                    f.write(content)
-                
-                # Create image record
-                img = RadiologyImage(
-                    report_id=report.id,
-                    filename=filename
-                )
-                db.add(img)
+    # Save validated images (reuse already-read content)
+    for original_filename, content in validated_files:
+        # Generate unique filename
+        ext = os.path.splitext(original_filename)[1].lower()
+        filename = f"{uuid.uuid4()}{ext}"
+        filepath = os.path.join(UPLOAD_DIR, filename)
+        
+        # Save file
+        with open(filepath, "wb") as f:
+            f.write(content)
+        
+        # Create image record
+        img = RadiologyImage(
+            report_id=report.id,
+            filename=filename
+        )
+        db.add(img)
     
     db.commit()
     
