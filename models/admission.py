@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class AdmissionType(str, enum.Enum):
     doctor = "doctor"
@@ -23,7 +27,7 @@ class Admission(Base):
     description = Column(String, nullable=False)  # Reason/complaint
     radiology_type = Column(String, nullable=True)  # e.g., "MRI", "CT Scan"
     status = Column(SQLEnum(AdmissionStatus), default=AdmissionStatus.waiting_payment)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     paid_at = Column(DateTime, nullable=True)
     paid_by = Column(Integer, ForeignKey("users.id"), nullable=True)

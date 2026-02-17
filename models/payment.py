@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class PayableType(str, enum.Enum):
     admission = "admission"
@@ -21,7 +25,7 @@ class Payment(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     receipt_number = Column(String, nullable=True)
     status = Column(SQLEnum(PaymentStatus), default=PaymentStatus.paid)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relationships

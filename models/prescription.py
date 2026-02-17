@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric, Boolean, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class PrescriptionStatus(str, enum.Enum):
     waiting_payment = "waiting_payment"
@@ -19,7 +23,7 @@ class Prescription(Base):
     is_manual = Column(Boolean, default=False)
     total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(SQLEnum(PrescriptionStatus), default=PrescriptionStatus.waiting_payment)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     dispensed_at = Column(DateTime, nullable=True)
     dispensed_by = Column(Integer, ForeignKey("users.id"), nullable=True)

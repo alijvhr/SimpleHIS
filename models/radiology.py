@@ -1,7 +1,11 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class RadiologyReport(Base):
     __tablename__ = "radiology_reports"
@@ -9,7 +13,7 @@ class RadiologyReport(Base):
     id = Column(Integer, primary_key=True, index=True)
     admission_id = Column(Integer, ForeignKey("admissions.id"), unique=True, nullable=False)
     report_text = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relationships
@@ -23,7 +27,7 @@ class RadiologyImage(Base):
     id = Column(Integer, primary_key=True, index=True)
     report_id = Column(Integer, ForeignKey("radiology_reports.id"), nullable=False)
     filename = Column(String, nullable=False)
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=utc_now)
     
     # Relationships
     report = relationship("RadiologyReport", back_populates="images")

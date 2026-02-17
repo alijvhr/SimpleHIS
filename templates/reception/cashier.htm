@@ -35,7 +35,7 @@
                         <span class="badge badge-warning">رادیولوژی - {{ admission.radiology_type }}</span>
                         {% endif %}
                     </td>
-                    <td>{{ admission.description[:50] }}...</td>
+                    <td>{{ admission.description|truncate(50) }}</td>
                     <td>{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
                     <td>
                         {% if admission.admission_type.value == 'doctor' %}

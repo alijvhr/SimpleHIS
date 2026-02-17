@@ -1,7 +1,11 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class Drug(Base):
     __tablename__ = "drugs"
@@ -14,7 +18,7 @@ class Drug(Base):
     default_instructions = Column(String, nullable=False)  # e.g., "روزی ۲ عدد بعد غذا"
     price = Column(Numeric(10, 2), nullable=False)
     min_threshold = Column(Integer, default=10)  # Minimum stock threshold
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relationships

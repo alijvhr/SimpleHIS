@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 from database import get_db
 from models.user import User
@@ -334,7 +334,7 @@ async def complete_dispense(
         
         # Update prescription status
         prescription.status = PrescriptionStatus.dispensed
-        prescription.dispensed_at = datetime.utcnow()
+        prescription.dispensed_at = datetime.now(timezone.utc)
         prescription.dispensed_by = current_user.id
         
         db.commit()

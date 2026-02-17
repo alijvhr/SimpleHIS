@@ -1,8 +1,12 @@
 from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Enum as SQLEnum
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 import enum
+
+def utc_now():
+    """Return current UTC time with timezone info"""
+    return datetime.now(timezone.utc)
 
 class Gender(str, enum.Enum):
     male = "male"
@@ -19,7 +23,7 @@ class Patient(Base):
     birth_date = Column(Date, nullable=False)
     gender = Column(SQLEnum(Gender), nullable=False)
     address = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
     # Relationships

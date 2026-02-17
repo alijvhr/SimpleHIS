@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 from database import get_db
 from models.user import User
@@ -118,7 +118,7 @@ async def complete_visit(
     admission = db.query(Admission).filter(Admission.id == admission_id).first()
     if admission:
         admission.status = AdmissionStatus.completed
-        admission.completed_at = datetime.utcnow()
+        admission.completed_at = datetime.now(timezone.utc)
         db.commit()
     
     return RedirectResponse(url="/doctor/patients", status_code=302)

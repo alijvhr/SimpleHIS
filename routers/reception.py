@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from database import get_db
 from models.user import User
 from models.patient import Patient, Gender
@@ -13,12 +13,6 @@ from auth import require_auth, require_role
 
 router = APIRouter(prefix="/reception", tags=["reception"])
 templates = Jinja2Templates(directory="templates")
-
-def add_message(request: Request, message_type: str, text: str):
-    """Add flash message"""
-    if not hasattr(request.state, 'messages'):
-        request.state.messages = []
-    request.state.messages.append({"type": message_type, "text": text})
 
 @router.get("/patients", response_class=HTMLResponse)
 async def patients_list(
@@ -211,7 +205,7 @@ async def pay_admission(
     admission = db.query(Admission).filter(Admission.id == admission_id).first()
     if admission:
         admission.status = AdmissionStatus.paid
-        admission.paid_at = datetime.utcnow()
+        admission.paid_at = datetime.now(timezone.utc)
         admission.paid_by = current_user.id
         
         payment = Payment(
