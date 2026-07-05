@@ -21,5 +21,5 @@ def get_db():
 
 def init_db():
     """Initialize database and create all tables"""
-    from models import user, patient, admission, payment, drug, stock, prescription, radiology
+    from models import user, patient, admission, payment, drug, stock, prescription, radiology, lab_test, lab_order, lab_result
     Base.metadata.create_all(bind=engine)

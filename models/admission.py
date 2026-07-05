@@ -39,3 +39,4 @@ class Admission(Base):
     payer = relationship("User", foreign_keys=[paid_by])
     radiology_report = relationship("RadiologyReport", back_populates="admission", uselist=False)
     prescription = relationship("Prescription", back_populates="admission", uselist=False)
+    lab_orders = relationship("LabOrder", back_populates="admission")

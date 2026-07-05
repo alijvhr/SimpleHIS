@@ -11,6 +11,7 @@ def utc_now():
 class PayableType(str, enum.Enum):
     admission = "admission"
     prescription = "prescription"
+    lab_order = "lab_order"
 
 class PaymentStatus(str, enum.Enum):
     paid = "paid"

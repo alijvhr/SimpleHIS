@@ -30,3 +30,4 @@ class Patient(Base):
     creator = relationship("User", foreign_keys=[created_by])
     admissions = relationship("Admission", back_populates="patient")
     prescriptions = relationship("Prescription", back_populates="patient")
+    lab_orders = relationship("LabOrder", back_populates="patient")
