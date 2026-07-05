@@ -73,6 +73,18 @@
     .grid-4 {
         grid-template-columns: 1fr;
     }
+
+    .workflow-grid,
+    .patient-summary,
+    .cashier-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .flex-between {
+        align-items: flex-start;
+        gap: 1rem;
+        flex-direction: column;
+    }
     
     .table {
         font-size: 0.875rem;

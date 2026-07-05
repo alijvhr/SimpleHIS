@@ -1,6 +1,9 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import HTTPException
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import Request
 from contextlib import asynccontextmanager
 import uvicorn
 
@@ -25,6 +28,15 @@ app = FastAPI(
     version="2.0",
     lifespan=lifespan
 )
+
+# Exception handler for authentication errors
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401:
+        accept = request.headers.get("accept", "")
+        if "text/html" in accept:
+            return RedirectResponse(url="/login", status_code=302)
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 # CORS middleware
 app.add_middleware(

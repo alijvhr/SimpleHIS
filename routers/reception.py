@@ -1,3 +1,4 @@
+from decimal import Decimal, ROUND_HALF_UP
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -9,12 +10,51 @@ from models.patient import Patient, Gender
 from models.admission import Admission, AdmissionType, AdmissionStatus
 from models.payment import Payment, PayableType, PaymentStatus
 from models.prescription import Prescription, PrescriptionStatus
-from auth import require_auth, require_role
+from auth import require_role
 from utils.validators import validate_iranian_national_id
 from config import get_admission_price
 
 router = APIRouter(prefix="/reception", tags=["reception"])
 templates = Jinja2Templates(directory="templates")
+
+INSURANCE_PLANS = {
+    "none": {"title": "آزاد", "coverage_percent": 0},
+    "social": {"title": "تامین اجتماعی", "coverage_percent": 70},
+    "health": {"title": "سلامت", "coverage_percent": 80},
+    "armed": {"title": "نیروهای مسلح", "coverage_percent": 90},
+    "supplemental": {"title": "تکمیلی", "coverage_percent": 95},
+}
+
+def money(value) -> Decimal:
+    return Decimal(str(value)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+def get_admission_invoice(admission_type: str, insurance_provider: str = "none") -> dict:
+    plan = INSURANCE_PLANS.get(insurance_provider, INSURANCE_PLANS["none"])
+    gross_amount = money(get_admission_price(admission_type))
+    coverage_amount = money(gross_amount * Decimal(plan["coverage_percent"]) / Decimal(100))
+    patient_amount = max(Decimal("0"), gross_amount - coverage_amount)
+    return {
+        "insurance_provider": insurance_provider if insurance_provider in INSURANCE_PLANS else "none",
+        "insurance_title": plan["title"],
+        "coverage_percent": plan["coverage_percent"],
+        "gross_amount": gross_amount,
+        "coverage_amount": coverage_amount,
+        "patient_amount": patient_amount,
+    }
+
+def receipt_number(prefix: str, item_id: int) -> str:
+    return f"{prefix}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{item_id}"
+
+def cashier_messages(request: Request):
+    if request.query_params.get("paid") == "1":
+        return [{"type": "success", "text": "پرداخت با موفقیت ثبت شد و پرونده به مرحله بعدی ارسال شد."}]
+    if request.query_params.get("cancelled") == "1":
+        return [{"type": "warning", "text": "درخواست با موفقیت لغو شد."}]
+    if request.query_params.get("error") == "not_found":
+        return [{"type": "danger", "text": "درخواست مورد نظر پیدا نشد."}]
+    if request.query_params.get("error") == "invalid_status":
+        return [{"type": "danger", "text": "این درخواست دیگر در وضعیت قابل پرداخت نیست."}]
+    return []
 
 @router.get("/patients", response_class=HTMLResponse)
 async def patients_list(
@@ -73,6 +113,8 @@ async def create_patient(
     db: Session = Depends(get_db)
 ):
     """Create new patient"""
+    national_id = ''.join(filter(str.isdigit, national_id))
+
     # Validate national ID format
     if not validate_iranian_national_id(national_id):
         return templates.TemplateResponse(
@@ -150,7 +192,13 @@ async def admit_form(
             "request": request,
             "current_user": current_user,
             "active_page": "admit",
-            "patient": patient
+            "patient": patient,
+            "insurance_plans": INSURANCE_PLANS,
+            "admission_prices": {
+                "doctor": get_admission_price("doctor"),
+                "radiology": get_admission_price("radiology"),
+            },
+            "messages": [{"type": "danger", "text": "بیمار مورد نظر پیدا نشد."}] if request.query_params.get("error") == "not_found" else []
         }
     )
 
@@ -165,6 +213,10 @@ async def create_admission(
     db: Session = Depends(get_db)
 ):
     """Create admission"""
+    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    if not patient:
+        return RedirectResponse(url="/reception/admit?error=not_found", status_code=302)
+
     admission = Admission(
         patient_id=patient_id,
         admission_type=AdmissionType(admission_type),
@@ -174,8 +226,12 @@ async def create_admission(
         created_by=current_user.id
     )
     
-    db.add(admission)
-    db.commit()
+    try:
+        db.add(admission)
+        db.commit()
+    except Exception:
+        db.rollback()
+        return RedirectResponse(url=f"/reception/admit?patient_id={patient_id}&error=create_failed", status_code=302)
     
     return RedirectResponse(url="/reception/cashier", status_code=302)
 
@@ -188,17 +244,18 @@ async def cashier(
     """Cashier page - payments and cancellations"""
     waiting_admissions = db.query(Admission).filter(
         Admission.status == AdmissionStatus.waiting_payment
-    ).all()
+    ).order_by(Admission.created_at.asc()).all()
     
     waiting_prescriptions = db.query(Prescription).filter(
         Prescription.status == PrescriptionStatus.waiting_payment
-    ).all()
+    ).order_by(Prescription.created_at.asc()).all()
     
     # Add prices to admissions
     for admission in waiting_admissions:
         admission.price = get_admission_price(admission.admission_type.value)
+        admission.invoice = get_admission_invoice(admission.admission_type.value)
     
-    messages = getattr(request.state, 'messages', [])
+    messages = cashier_messages(request)
     
     return templates.TemplateResponse(
         "reception/cashier.htm",
@@ -208,6 +265,7 @@ async def cashier(
             "active_page": "cashier",
             "waiting_admissions": waiting_admissions,
             "waiting_prescriptions": waiting_prescriptions,
+            "insurance_plans": INSURANCE_PLANS,
             "messages": messages
         }
     )
@@ -216,29 +274,35 @@ async def cashier(
 async def pay_admission(
     request: Request,
     admission_id: int = Form(...),
-    amount: float = Form(...),
+    insurance_provider: str = Form("none"),
     current_user: User = Depends(require_role(['admin', 'reception'])),
     db: Session = Depends(get_db)
 ):
     """Pay for admission"""
     admission = db.query(Admission).filter(Admission.id == admission_id).first()
-    if admission:
-        admission.status = AdmissionStatus.paid
-        admission.paid_at = datetime.now(timezone.utc)
-        admission.paid_by = current_user.id
-        
-        payment = Payment(
-            payable_type=PayableType.admission,
-            payable_id=admission_id,
-            amount=amount,
-            status=PaymentStatus.paid,
-            created_by=current_user.id
-        )
-        
-        db.add(payment)
-        db.commit()
+    if not admission:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if admission.status != AdmissionStatus.waiting_payment:
+        return RedirectResponse(url="/reception/cashier?error=invalid_status", status_code=302)
+
+    invoice = get_admission_invoice(admission.admission_type.value, insurance_provider)
+    admission.status = AdmissionStatus.paid
+    admission.paid_at = datetime.now(timezone.utc)
+    admission.paid_by = current_user.id
+
+    payment = Payment(
+        payable_type=PayableType.admission,
+        payable_id=admission_id,
+        amount=invoice["patient_amount"],
+        receipt_number=receipt_number("ADM", admission_id),
+        status=PaymentStatus.paid,
+        created_by=current_user.id
+    )
+
+    db.add(payment)
+    db.commit()
     
-    return RedirectResponse(url="/reception/cashier?success=1", status_code=302)
+    return RedirectResponse(url="/reception/cashier?paid=1", status_code=302)
 
 @router.post("/cashier/cancel-admission")
 async def cancel_admission(
@@ -249,11 +313,13 @@ async def cancel_admission(
 ):
     """Cancel admission"""
     admission = db.query(Admission).filter(Admission.id == admission_id).first()
-    if admission:
+    if not admission:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if admission.status == AdmissionStatus.waiting_payment:
         admission.status = AdmissionStatus.cancelled
         db.commit()
     
-    return RedirectResponse(url="/reception/cashier", status_code=302)
+    return RedirectResponse(url="/reception/cashier?cancelled=1", status_code=302)
 
 @router.post("/cashier/pay-prescription")
 async def pay_prescription(
@@ -264,21 +330,26 @@ async def pay_prescription(
 ):
     """Pay for prescription"""
     prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
-    if prescription:
-        prescription.status = PrescriptionStatus.paid
-        
-        payment = Payment(
-            payable_type=PayableType.prescription,
-            payable_id=prescription_id,
-            amount=prescription.total_amount,
-            status=PaymentStatus.paid,
-            created_by=current_user.id
-        )
-        
-        db.add(payment)
-        db.commit()
+    if not prescription:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if prescription.status != PrescriptionStatus.waiting_payment:
+        return RedirectResponse(url="/reception/cashier?error=invalid_status", status_code=302)
+
+    prescription.status = PrescriptionStatus.paid
+
+    payment = Payment(
+        payable_type=PayableType.prescription,
+        payable_id=prescription_id,
+        amount=prescription.total_amount,
+        receipt_number=receipt_number("RX", prescription_id),
+        status=PaymentStatus.paid,
+        created_by=current_user.id
+    )
+
+    db.add(payment)
+    db.commit()
     
-    return RedirectResponse(url="/reception/cashier?success=1", status_code=302)
+    return RedirectResponse(url="/reception/cashier?paid=1", status_code=302)
 
 @router.post("/cashier/cancel-prescription")
 async def cancel_prescription(
@@ -289,8 +360,10 @@ async def cancel_prescription(
 ):
     """Cancel prescription"""
     prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
-    if prescription:
+    if not prescription:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if prescription.status == PrescriptionStatus.waiting_payment:
         prescription.status = PrescriptionStatus.cancelled
         db.commit()
     
-    return RedirectResponse(url="/reception/cashier", status_code=302)
+    return RedirectResponse(url="/reception/cashier?cancelled=1", status_code=302)

@@ -4,122 +4,228 @@
 
 {% block main_content %}
 <div class="card">
-    <div class="card-header">
-        <h2 class="card-title">صندوق - پرداخت و لغو تراکنش‌ها</h2>
+    <div class="card-header flex-between">
+        <h2 class="card-title">صندوق پذیرش و داروخانه</h2>
+        <div class="queue-stats">
+            <span class="badge badge-warning">{{ waiting_admissions|length }} پذیرش</span>
+            <span class="badge badge-info">{{ waiting_prescriptions|length }} نسخه</span>
+        </div>
     </div>
     <div class="card-body">
-        <h3 class="mb-3">پذیرش‌های در انتظار پرداخت</h3>
-        
-        {% if waiting_admissions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>شماره</th>
-                    <th>بیمار</th>
-                    <th>نوع</th>
-                    <th>علت/شرح</th>
-                    <th>تاریخ</th>
-                    <th>مبلغ (تومان)</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for admission in waiting_admissions %}
-                <tr>
-                    <td>{{ admission.id }}</td>
-                    <td>{{ admission.patient.full_name }}</td>
-                    <td>
-                        {% if admission.admission_type.value == 'doctor' %}
-                        <span class="badge badge-info">ویزیت پزشک</span>
-                        {% else %}
-                        <span class="badge badge-warning">رادیولوژی - {{ admission.radiology_type }}</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ admission.description|truncate(50) }}</td>
-                    <td>{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>{{ "{:,}".format(admission.price) }}</td>
-                    <td>
-                        <form method="POST" action="/reception/cashier/pay-admission" style="display: inline;">
-                            <input type="hidden" name="admission_id" value="{{ admission.id }}">
-                            <input type="hidden" name="amount" value="{{ admission.price }}">
-                            <button type="submit" class="btn btn-success btn-sm">
-                                <i class="fas fa-money-bill"></i>
-                                پرداخت
-                            </button>
-                        </form>
-                        <form method="POST" action="/reception/cashier/cancel-admission" style="display: inline;" onsubmit="return confirm('آیا از لغو این پذیرش اطمینان دارید؟');">
-                            <input type="hidden" name="admission_id" value="{{ admission.id }}">
-                            <button type="submit" class="btn btn-danger btn-sm">
-                                <i class="fas fa-times"></i>
-                                لغو
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i>
-            <span>پذیرشی در انتظار پرداخت وجود ندارد</span>
+        <div class="cashier-summary">
+            <div>
+                <span>کل درخواست‌های قابل پرداخت</span>
+                <strong>{{ waiting_admissions|length + waiting_prescriptions|length }}</strong>
+            </div>
+            <div>
+                <span>مسیر پس از پرداخت پذیرش</span>
+                <strong>صف پزشک / رادیولوژی</strong>
+            </div>
+            <div>
+                <span>مسیر پس از پرداخت نسخه</span>
+                <strong>صف تحویل دارو</strong>
+            </div>
         </div>
-        {% endif %}
-        
-        <h3 class="mt-4 mb-3">نسخه‌های در انتظار پرداخت</h3>
-        
-        {% if waiting_prescriptions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>شماره نسخه</th>
-                    <th>بیمار</th>
-                    <th>نوع</th>
-                    <th>مبلغ کل (تومان)</th>
-                    <th>تاریخ</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for prescription in waiting_prescriptions %}
-                <tr>
-                    <td>{{ prescription.id }}</td>
-                    <td>{{ prescription.patient.full_name }}</td>
-                    <td>
-                        {% if prescription.is_manual %}
-                        <span class="badge badge-warning">نسخه دستی</span>
-                        {% else %}
-                        <span class="badge badge-info">نسخه پزشک</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ "{:,}".format(prescription.total_amount|int) }}</td>
-                    <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>
-                        <form method="POST" action="/reception/cashier/pay-prescription" style="display: inline;">
-                            <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
-                            <button type="submit" class="btn btn-success btn-sm">
-                                <i class="fas fa-money-bill"></i>
-                                پرداخت
-                            </button>
-                        </form>
-                        <form method="POST" action="/reception/cashier/cancel-prescription" style="display: inline;" onsubmit="return confirm('آیا از لغو این نسخه اطمینان دارید؟');">
-                            <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
-                            <button type="submit" class="btn btn-danger btn-sm">
-                                <i class="fas fa-times"></i>
-                                لغو
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">پذیرش‌های در انتظار پرداخت</h2>
+    </div>
+    <div class="card-body">
+        {% if waiting_admissions %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>بیمار</th>
+                        <th>خدمت</th>
+                        <th>شرح</th>
+                        <th>زمان انتظار</th>
+                        <th>بیمه</th>
+                        <th>سهم بیمار</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admission in waiting_admissions %}
+                    <tr class="cashier-row"
+                        data-gross="{{ admission.price }}"
+                        data-row-id="admission-{{ admission.id }}">
+                        <td>#{{ admission.id }}</td>
+                        <td>
+                            <strong>{{ admission.patient.full_name }}</strong>
+                            <div class="muted">{{ admission.patient.national_id }}</div>
+                        </td>
+                        <td>
+                            {% if admission.admission_type.value == 'doctor' %}
+                            <span class="badge badge-info">ویزیت پزشک</span>
+                            {% else %}
+                            <span class="badge badge-warning">رادیولوژی - {{ admission.radiology_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ admission.description|truncate(60) }}</td>
+                        <td>
+                            <strong class="wait-time" data-created-at="{{ admission.created_at.isoformat() }}">در حال محاسبه</strong>
+                            <div class="muted">{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</div>
+                        </td>
+                        <td>
+                            <select class="form-control insurance-select" form="pay-admission-{{ admission.id }}"
+                                    name="insurance_provider" data-target="admission-{{ admission.id }}">
+                                {% for key, plan in insurance_plans.items() %}
+                                <option value="{{ key }}" data-coverage="{{ plan.coverage_percent }}">{{ plan.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <div class="invoice-stack">
+                                <span class="muted">تعرفه: {{ "{:,}".format(admission.price) }}</span>
+                                <strong id="patient-amount-admission-{{ admission.id }}">{{ "{:,}".format(admission.invoice.patient_amount|int) }}</strong>
+                                <span class="muted">تومان</span>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="action-row">
+                                <form id="pay-admission-{{ admission.id }}" method="POST" action="/reception/cashier/pay-admission">
+                                    <input type="hidden" name="admission_id" value="{{ admission.id }}">
+                                    <button type="submit" class="btn btn-success btn-sm">
+                                        <i class="fas fa-money-bill"></i>
+                                        پرداخت
+                                    </button>
+                                </form>
+                                <form method="POST" action="/reception/cashier/cancel-admission"
+                                      onsubmit="return confirm('آیا از لغو این پذیرش اطمینان دارید؟');">
+                                    <input type="hidden" name="admission_id" value="{{ admission.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">
+                                        <i class="fas fa-times"></i>
+                                        لغو
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
-            <span>نسخه‌ای در انتظار پرداخت وجود ندارد</span>
+            <span>پذیرشی در انتظار پرداخت وجود ندارد.</span>
         </div>
         {% endif %}
     </div>
 </div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">نسخه‌های در انتظار پرداخت</h2>
+    </div>
+    <div class="card-body">
+        {% if waiting_prescriptions %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره نسخه</th>
+                        <th>بیمار</th>
+                        <th>نوع</th>
+                        <th>مبلغ کل</th>
+                        <th>تاریخ</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for prescription in waiting_prescriptions %}
+                    <tr>
+                        <td>#{{ prescription.id }}</td>
+                        <td>
+                            <strong>{{ prescription.patient.full_name }}</strong>
+                            <div class="muted">{{ prescription.patient.national_id }}</div>
+                        </td>
+                        <td>
+                            {% if prescription.is_manual %}
+                            <span class="badge badge-warning">نسخه دستی</span>
+                            {% else %}
+                            <span class="badge badge-info">نسخه پزشک</span>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ "{:,}".format(prescription.total_amount|int) }}</strong> تومان</td>
+                        <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>
+                            <div class="action-row">
+                                <form method="POST" action="/reception/cashier/pay-prescription">
+                                    <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
+                                    <button type="submit" class="btn btn-success btn-sm">
+                                        <i class="fas fa-money-bill"></i>
+                                        پرداخت
+                                    </button>
+                                </form>
+                                <form method="POST" action="/reception/cashier/cancel-prescription"
+                                      onsubmit="return confirm('آیا از لغو این نسخه اطمینان دارید؟');">
+                                    <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm">
+                                        <i class="fas fa-times"></i>
+                                        لغو
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>نسخه‌ای در انتظار پرداخت وجود ندارد.</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function formatMoney(value) {
+    return Number(value || 0).toLocaleString('fa-IR');
+}
+
+document.querySelectorAll('.insurance-select').forEach(select => {
+    function updateRow() {
+        const target = select.dataset.target;
+        const row = document.querySelector(`[data-row-id="${target}"]`);
+        const selected = select.options[select.selectedIndex];
+        const coverage = Number(selected.dataset.coverage || 0);
+        const gross = Number(row.dataset.gross || 0);
+        const patientAmount = Math.max(0, Math.round(gross - (gross * coverage / 100)));
+        document.getElementById(`patient-amount-${target}`).textContent = formatMoney(patientAmount);
+    }
+
+    select.addEventListener('change', updateRow);
+    updateRow();
+});
+
+function updateWaitTimes() {
+    const now = Date.now();
+    document.querySelectorAll('.wait-time').forEach(item => {
+        const created = new Date(item.dataset.createdAt).getTime();
+        if (!created) {
+            item.textContent = '-';
+            return;
+        }
+        const minutes = Math.max(0, Math.floor((now - created) / 60000));
+        if (minutes < 60) {
+            item.textContent = `${minutes} دقیقه`;
+            return;
+        }
+        const hours = Math.floor(minutes / 60);
+        item.textContent = `${hours} ساعت و ${minutes % 60} دقیقه`;
+    });
+}
+
+updateWaitTimes();
+setInterval(updateWaitTimes, 60000);
+</script>
 {% endblock %}

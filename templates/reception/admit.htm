@@ -3,103 +3,311 @@
 {% block title %}پذیرش بیمار - سیستم اطلاعات بیمارستان{% endblock %}
 
 {% block main_content %}
-<div class="card">
-    <div class="card-header">
-        <h2 class="card-title">پذیرش بیمار</h2>
-    </div>
-    <div class="card-body">
-        {% if not patient %}
-        <!-- Patient Selection -->
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i>
-            <span>لطفا ابتدا بیمار را جستجو کنید</span>
+<div class="workflow-grid">
+    <div class="card">
+        <div class="card-header flex-between">
+            <h2 class="card-title">پذیرش بیمار</h2>
+            <span class="badge badge-info">جستجوی هوشمند</span>
         </div>
-        
-        <form method="GET" action="/reception/admit">
+        <div class="card-body">
+            <div class="alert alert-info">
+                <i class="fas fa-id-card"></i>
+                <span>کد ملی را وارد کنید. در صورت وجود پرونده، اطلاعات بیمار خودکار تکمیل می‌شود؛ در غیر این صورت ثبت سریع باز می‌شود.</span>
+            </div>
+
             <div class="grid grid-2">
                 <div class="form-group">
-                    <label for="national_id" class="form-label">کد ملی بیمار</label>
-                    <input type="text" id="national_id" name="national_id" 
-                           class="form-control" placeholder="جستجو با کد ملی">
+                    <label for="national_id_lookup" class="form-label">کد ملی بیمار</label>
+                    <input type="text" id="national_id_lookup" class="form-control"
+                           value="{{ patient.national_id if patient else '' }}"
+                           inputmode="numeric" maxlength="10" autocomplete="off"
+                           placeholder="مثال: ۰۰۱۲۳۴۵۶۷۸">
                 </div>
                 <div class="form-group">
-                    <label>&nbsp;</label>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-search"></i>
-                        جستجو
+                    <label class="form-label">&nbsp;</label>
+                    <div id="lookup_status" class="lookup-status">در انتظار ورود کد ملی</div>
+                </div>
+            </div>
+
+            <div id="patient_summary" class="patient-summary {% if not patient %}hidden{% endif %}">
+                <div>
+                    <div class="summary-label">بیمار</div>
+                    <strong id="summary_name">{{ patient.full_name if patient else '-' }}</strong>
+                </div>
+                <div>
+                    <div class="summary-label">کد ملی</div>
+                    <span id="summary_national_id">{{ patient.national_id if patient else '-' }}</span>
+                </div>
+                <div>
+                    <div class="summary-label">تلفن</div>
+                    <span id="summary_phone">{{ patient.phone if patient else '-' }}</span>
+                </div>
+                <div>
+                    <div class="summary-label">آخرین مراجعه</div>
+                    <span id="summary_last_visit">در حال بررسی</span>
+                </div>
+            </div>
+
+            <form method="POST" action="/reception/admit" id="admission_form" class="mt-3">
+                <input type="hidden" id="patient_id" name="patient_id" value="{{ patient.id if patient else '' }}">
+
+                <div class="grid grid-2">
+                    <div class="form-group">
+                        <label for="admission_type" class="form-label">نوع پذیرش <span style="color: var(--danger);">*</span></label>
+                        <select id="admission_type" name="admission_type" class="form-control" required>
+                            <option value="">انتخاب کنید</option>
+                            <option value="doctor">ویزیت پزشک</option>
+                            <option value="radiology">رادیولوژی</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="radiology_type_group" style="display: none;">
+                        <label for="radiology_type" class="form-label">نوع رادیولوژی</label>
+                        <select id="radiology_type" name="radiology_type" class="form-control">
+                            <option value="">انتخاب کنید</option>
+                            <option value="MRI">MRI - ام آر آی</option>
+                            <option value="CT Scan">CT Scan - سی تی اسکن</option>
+                            <option value="X-Ray">X-Ray - اشعه ایکس</option>
+                            <option value="Ultrasound">Ultrasound - سونوگرافی</option>
+                            <option value="Mammography">Mammography - ماموگرافی</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="description" class="form-label">علت/شرح حال <span style="color: var(--danger);">*</span></label>
+                    <textarea id="description" name="description" class="form-control" rows="4" required
+                              placeholder="علت مراجعه و نکات ضروری پذیرش را وارد کنید..."></textarea>
+                </div>
+
+                <div class="flex-gap mt-3">
+                    <button type="submit" id="submit_admission" class="btn btn-success" {% if not patient %}disabled{% endif %}>
+                        <i class="fas fa-check"></i>
+                        ثبت پذیرش و ارسال به صندوق
                     </button>
+                    <a href="/reception/patients" class="btn btn-secondary">
+                        <i class="fas fa-times"></i>
+                        انصراف
+                    </a>
                 </div>
-            </div>
-        </form>
-        
-        {% else %}
-        <!-- Admission Form -->
-        <div class="alert alert-success mb-3">
-            <i class="fas fa-check-circle"></i>
-            <span>بیمار: {{ patient.full_name }} ({{ patient.national_id }})</span>
+            </form>
         </div>
-        
-        <form method="POST" action="/reception/admit">
-            <input type="hidden" name="patient_id" value="{{ patient.id }}">
-            
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">پیش‌فاکتور</h2>
+        </div>
+        <div class="card-body">
+            <div class="invoice-line">
+                <span>تعرفه خدمت</span>
+                <strong id="invoice_gross">۰</strong>
+            </div>
+            <div class="invoice-line">
+                <span>وضعیت پرداخت</span>
+                <span class="badge badge-warning">در انتظار صندوق</span>
+            </div>
+            <div class="alert alert-warning mt-3">
+                <i class="fas fa-cash-register"></i>
+                <span>محاسبه نهایی بیمه در صندوق انجام و ثبت می‌شود.</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="quick_patient_modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3>ثبت سریع بیمار</h3>
+            <button type="button" class="modal-close" id="close_quick_modal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="quick_patient_error" class="alert alert-danger hidden"></div>
+        <form id="quick_patient_form">
+            <input type="hidden" id="quick_national_id" name="national_id">
             <div class="grid grid-2">
                 <div class="form-group">
-                    <label for="admission_type" class="form-label">نوع پذیرش <span style="color: var(--danger);">*</span></label>
-                    <select id="admission_type" name="admission_type" class="form-control" required onchange="toggleRadiologyType(this)">
-                        <option value="">انتخاب کنید</option>
-                        <option value="doctor">ویزیت پزشک</option>
-                        <option value="radiology">رادیولوژی</option>
-                    </select>
+                    <label for="quick_full_name" class="form-label">نام و نام خانوادگی</label>
+                    <input type="text" id="quick_full_name" class="form-control" required>
                 </div>
-                
-                <div class="form-group" id="radiology_type_group" style="display: none;">
-                    <label for="radiology_type" class="form-label">نوع رادیولوژی</label>
-                    <select id="radiology_type" name="radiology_type" class="form-control">
+                <div class="form-group">
+                    <label for="quick_phone" class="form-label">تلفن</label>
+                    <input type="text" id="quick_phone" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="quick_birth_date" class="form-label">تاریخ تولد</label>
+                    <input type="date" id="quick_birth_date" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="quick_gender" class="form-label">جنسیت</label>
+                    <select id="quick_gender" class="form-control" required>
                         <option value="">انتخاب کنید</option>
-                        <option value="MRI">MRI - ام آر آی</option>
-                        <option value="CT Scan">CT Scan - سی تی اسکن</option>
-                        <option value="X-Ray">X-Ray - اشعه ایکس</option>
-                        <option value="Ultrasound">Ultrasound - سونوگرافی</option>
-                        <option value="Mammography">Mammography - ماموگرافی</option>
+                        <option value="male">مرد</option>
+                        <option value="female">زن</option>
+                        <option value="other">سایر</option>
                     </select>
                 </div>
             </div>
-            
             <div class="form-group">
-                <label for="description" class="form-label">علت/شرح حال <span style="color: var(--danger);">*</span></label>
-                <textarea id="description" name="description" class="form-control" 
-                          rows="4" required 
-                          placeholder="لطفا علت مراجعه و شرح حال بیمار را وارد کنید..."></textarea>
+                <label for="quick_address" class="form-label">آدرس</label>
+                <textarea id="quick_address" class="form-control" rows="2"></textarea>
             </div>
-            
-            <div class="flex-gap mt-3">
+            <div class="flex-gap">
                 <button type="submit" class="btn btn-success">
-                    <i class="fas fa-check"></i>
-                    ثبت پذیرش
+                    <i class="fas fa-save"></i>
+                    ثبت بیمار
                 </button>
-                <a href="/reception/patients" class="btn btn-secondary">
-                    <i class="fas fa-times"></i>
-                    انصراف
-                </a>
+                <button type="button" class="btn btn-secondary" id="cancel_quick_modal">انصراف</button>
             </div>
         </form>
-        {% endif %}
     </div>
 </div>
 
 <script>
-function toggleRadiologyType(select) {
+const admissionPrices = {{ admission_prices|tojson }};
+let lookupTimer = null;
+
+function toMoney(value) {
+    return Number(value || 0).toLocaleString('fa-IR') + ' تومان';
+}
+
+function setLookupStatus(message, type = 'info') {
+    const status = document.getElementById('lookup_status');
+    status.className = `lookup-status lookup-${type}`;
+    status.textContent = message;
+}
+
+function setPatient(patient) {
+    document.getElementById('patient_id').value = patient.id;
+    document.getElementById('summary_name').textContent = patient.full_name;
+    document.getElementById('summary_national_id').textContent = patient.national_id;
+    document.getElementById('summary_phone').textContent = patient.phone || '-';
+    document.getElementById('summary_last_visit').textContent = patient.last_visit
+        ? `${patient.last_visit.created_at.slice(0, 10)} - ${patient.last_visit.description || 'بدون شرح'}`
+        : 'سابقه‌ای ثبت نشده است';
+    document.getElementById('patient_summary').classList.remove('hidden');
+    document.getElementById('submit_admission').disabled = false;
+}
+
+function clearPatient() {
+    document.getElementById('patient_id').value = '';
+    document.getElementById('patient_summary').classList.add('hidden');
+    document.getElementById('submit_admission').disabled = true;
+}
+
+function openQuickModal(nationalId) {
+    document.getElementById('quick_national_id').value = nationalId;
+    document.getElementById('quick_patient_error').classList.add('hidden');
+    document.getElementById('quick_patient_modal').classList.remove('hidden');
+    document.getElementById('quick_full_name').focus();
+}
+
+function closeQuickModal() {
+    document.getElementById('quick_patient_modal').classList.add('hidden');
+}
+
+function updateInvoice() {
+    const type = document.getElementById('admission_type').value;
+    document.getElementById('invoice_gross').textContent = toMoney(admissionPrices[type] || 0);
+}
+
+document.getElementById('national_id_lookup').addEventListener('input', function() {
+    const nationalId = this.value.replace(/\D/g, '').slice(0, 10);
+    this.value = nationalId;
+    clearTimeout(lookupTimer);
+    clearPatient();
+
+    if (nationalId.length < 10) {
+        setLookupStatus('در انتظار تکمیل کد ملی');
+        return;
+    }
+
+    setLookupStatus('در حال جستجو...');
+    lookupTimer = setTimeout(() => {
+        fetch(`/api/patients/lookup?national_id=${encodeURIComponent(nationalId)}`)
+            .then(async response => {
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'خطا در جستجو');
+                }
+                return data;
+            })
+            .then(data => {
+                if (data.exists) {
+                    setPatient(data.patient);
+                    setLookupStatus('پرونده بیمار یافت شد', 'success');
+                } else {
+                    setLookupStatus('بیمار جدید است؛ ثبت سریع را تکمیل کنید', 'warning');
+                    openQuickModal(nationalId);
+                }
+            })
+            .catch(error => {
+                setLookupStatus(error.message, 'danger');
+            });
+    }, 350);
+});
+
+document.getElementById('admission_type').addEventListener('change', function() {
     const radiologyGroup = document.getElementById('radiology_type_group');
     const radiologySelect = document.getElementById('radiology_type');
-    
-    if (select.value === 'radiology') {
-        radiologyGroup.style.display = 'block';
-        radiologySelect.required = true;
-    } else {
-        radiologyGroup.style.display = 'none';
-        radiologySelect.required = false;
+    const isRadiology = this.value === 'radiology';
+    radiologyGroup.style.display = isRadiology ? 'block' : 'none';
+    radiologySelect.required = isRadiology;
+    if (!isRadiology) {
         radiologySelect.value = '';
     }
-}
+    updateInvoice();
+});
+
+document.getElementById('quick_patient_form').addEventListener('submit', function(event) {
+    event.preventDefault();
+    const errorBox = document.getElementById('quick_patient_error');
+    const payload = {
+        national_id: document.getElementById('quick_national_id').value,
+        full_name: document.getElementById('quick_full_name').value,
+        phone: document.getElementById('quick_phone').value,
+        birth_date: document.getElementById('quick_birth_date').value,
+        gender: document.getElementById('quick_gender').value,
+        address: document.getElementById('quick_address').value
+    };
+
+    fetch('/api/patients/quick-create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+    })
+        .then(async response => {
+            const data = await response.json();
+            if (!response.ok) {
+                throw new Error(data.message || 'ثبت بیمار انجام نشد');
+            }
+            return data;
+        })
+        .then(data => {
+            setPatient(data.patient);
+            setLookupStatus('بیمار جدید ثبت شد', 'success');
+            closeQuickModal();
+            this.reset();
+        })
+        .catch(error => {
+            errorBox.textContent = error.message;
+            errorBox.classList.remove('hidden');
+        });
+});
+
+document.getElementById('close_quick_modal').addEventListener('click', closeQuickModal);
+document.getElementById('cancel_quick_modal').addEventListener('click', closeQuickModal);
+
+{% if patient %}
+setPatient({
+    id: {{ patient.id }},
+    national_id: {{ patient.national_id|tojson }},
+    full_name: {{ patient.full_name|tojson }},
+    phone: {{ patient.phone|tojson }},
+    last_visit: null
+});
+setLookupStatus('پرونده بیمار انتخاب شده است', 'success');
+{% endif %}
 </script>
 {% endblock %}

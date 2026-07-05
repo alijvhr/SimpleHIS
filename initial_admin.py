@@ -22,7 +22,11 @@ def create_initial_admin():
         # Check if admin already exists
         existing_admin = db.query(User).filter(User.role == UserRole.admin).first()
         if existing_admin:
-            print("❌ An admin user already exists!")
+            print("ℹ️  An admin user already exists. Updating password...")
+            password = input("Enter new password (default: admin123): ").strip() or "admin123"
+            existing_admin.password_hash = get_password_hash(password)
+            db.commit()
+            print("✅ Admin password updated successfully!")
             print(f"   Username: {existing_admin.username}")
             print(f"   Full Name: {existing_admin.full_name}")
             return

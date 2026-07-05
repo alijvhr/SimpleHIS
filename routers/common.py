@@ -4,20 +4,27 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User
-from auth import verify_password, create_access_token, get_current_user_from_cookie, require_auth
+from auth import verify_password, create_access_token, get_current_user_from_cookie, require_auth, ACCESS_TOKEN_EXPIRE_MINUTES
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 @router.get("/", response_class=HTMLResponse)
-async def root():
-    """Redirect root to home"""
-    return RedirectResponse(url="/home", status_code=302)
+async def root(request: Request, db: Session = Depends(get_db)):
+    """Redirect root based on auth status"""
+    user = get_current_user_from_cookie(request, db)
+    if user:
+        return RedirectResponse(url="/home", status_code=302)
+    else:
+        return RedirectResponse(url="/login", status_code=302)
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     """Login page"""
-    return templates.TemplateResponse("common/login.htm", {"request": request})
+    error = None
+    if request.query_params.get("error") == "1":
+        error = "نام کاربری یا رمز عبور اشتباه است"
+    return templates.TemplateResponse("common/login.htm", {"request": request, "error": error})
 
 @router.post("/login")
 async def login(
@@ -30,11 +37,8 @@ async def login(
     user = db.query(User).filter(User.username == username, User.is_active == True).first()
     
     if not user or not verify_password(password, user.password_hash):
-        return templates.TemplateResponse(
-            "common/login.htm",
-            {"request": request, "error": "نام کاربری یا رمز عبور اشتباه است"}
-        )
-    
+        return RedirectResponse(url="/login?error=1", status_code=302)
+
     # Create access token
     access_token = create_access_token(data={"sub": user.id})
     
@@ -43,9 +47,11 @@ async def login(
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,
-        max_age=28800,  # 8 hours
-        samesite="lax"
+        path="/",
+        httponly=False,
+        secure=False,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # Convert minutes to seconds
     )
     return response
 
@@ -53,8 +59,16 @@ async def login(
 async def logout():
     """Logout endpoint"""
     response = RedirectResponse(url="/login", status_code=302)
-    response.delete_cookie("access_token")
+    response.delete_cookie(
+        key="access_token",
+        path="/"
+    )
     return response
+
+@router.get("/debug")
+async def debug(request: Request):
+    """Debug route to check cookies"""
+    return {"cookies": dict(request.cookies)}
 
 @router.get("/home", response_class=HTMLResponse)
 async def home(request: Request, current_user: User = Depends(require_auth)):

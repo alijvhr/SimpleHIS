@@ -519,6 +519,137 @@ textarea.form-control {
     grid-template-columns: repeat(4, 1fr);
 }
 
+.workflow-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.lookup-status {
+    min-height: 48px;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+}
+
+.lookup-success {
+    border-color: var(--success);
+    color: var(--success);
+    background: rgba(40, 167, 69, 0.1);
+}
+
+.lookup-warning {
+    border-color: var(--warning);
+    color: var(--warning);
+    background: rgba(255, 193, 7, 0.1);
+}
+
+.lookup-danger {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: rgba(220, 53, 69, 0.1);
+}
+
+.patient-summary,
+.cashier-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+}
+
+.cashier-summary {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.summary-label,
+.muted {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.invoice-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.invoice-line:last-child {
+    border-bottom: none;
+}
+
+.invoice-stack {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.queue-stats,
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 1000;
+}
+
+.modal-card {
+    width: 100%;
+    max-width: 720px;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    background: var(--card-bg);
+    border-radius: 8px;
+    box-shadow: 0 12px 32px var(--shadow-hover);
+    padding: 1.5rem;
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.modal-close {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+}
+
 /* Low Stock Highlight */
 .low-stock {
     background: rgba(255, 193, 7, 0.1);
