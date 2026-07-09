@@ -1,15 +1,71 @@
 {% extends "layout/panel.htm" %}
 
-{% block title %}خانه - سیستم اطلاعات بیمارستان{% endblock %}
+{% block title %}داشبورد - سامانه اطلاعات بیمارستان{% endblock %}
 
 {% block main_content %}
-<div class="home-container">
-    <div class="card home-card">
-        <div class="home-logo">
-            <img src="/static/assets/logo.png" alt="Logo">
+<div class="card">
+    <div class="card-header flex-between">
+        <div>
+            <h2 class="card-title">داشبورد کاری</h2>
+            <p class="muted">خوش آمدید، {{ current_user.full_name }}</p>
         </div>
-        <h1 class="home-welcome">خوش آمدید</h1>
-        <p class="text-center mt-2">{{ current_user.full_name }}</p>
+        <span class="badge badge-info">{{ current_user.role.value }}</span>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-3">
+            {% if current_user.role in ['admin', 'reception'] %}
+            <a class="workflow-tile" href="/reception/admit">
+                <i class="fas fa-user-plus"></i>
+                <strong>پذیرش سریع</strong>
+                <span>ثبت بیمار، پذیرش و آماده سازی پرداخت</span>
+            </a>
+            <a class="workflow-tile" href="/reception/cashier">
+                <i class="fas fa-cash-register"></i>
+                <strong>صندوق یکپارچه</strong>
+                <span>پرداخت پذیرش، نسخه و آزمایشگاه</span>
+            </a>
+            {% endif %}
+
+            {% if current_user.role in ['admin', 'doctor'] %}
+            <a class="workflow-tile" href="/doctor/patients">
+                <i class="fas fa-stethoscope"></i>
+                <strong>صف ویزیت</strong>
+                <span>پرونده بیمار، نسخه و سفارش های بالینی</span>
+            </a>
+            {% endif %}
+
+            {% if current_user.role in ['admin', 'laboratory'] %}
+            <a class="workflow-tile" href="/lab/orders">
+                <i class="fas fa-vial"></i>
+                <strong>آزمایشگاه</strong>
+                <span>نمونه گیری، ثبت نتیجه و چاپ گزارش</span>
+            </a>
+            {% endif %}
+
+            {% if current_user.role in ['admin', 'radiologist'] %}
+            <a class="workflow-tile" href="/radiology/admissions">
+                <i class="fas fa-x-ray"></i>
+                <strong>رادیولوژی</strong>
+                <span>ثبت گزارش و بارگذاری تصاویر</span>
+            </a>
+            {% endif %}
+
+            {% if current_user.role in ['admin', 'pharmacy'] %}
+            <a class="workflow-tile" href="/pharmacy/dispense">
+                <i class="fas fa-prescription-bottle"></i>
+                <strong>تحویل نسخه</strong>
+                <span>کنترل موجودی و تحویل دارو</span>
+            </a>
+            {% endif %}
+
+            {% if current_user.role == 'admin' %}
+            <a class="workflow-tile" href="/admin/users">
+                <i class="fas fa-users-cog"></i>
+                <strong>مدیریت کاربران</strong>
+                <span>تعریف نقش ها و کنترل دسترسی</span>
+            </a>
+            {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

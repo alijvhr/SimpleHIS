@@ -158,7 +158,7 @@ SimpleHIS/
 - ✅ Production-ready Gunicorn with high-concurrency Uvicorn workers
 - ✅ Multi-stage Dockerfile optimized for small image sizes
 - ✅ Multi-container orchestration using Docker Compose
-- ✅ Nginx reverse proxy configuration with built-in gzip and caching rules
+- ✅ Nginx reverse proxy configuration with built-in gzip and cachi ng rules
 - ✅ Automated Let's Encrypt SSL/HTTPS setup scripts
 
 ## 📦 Dependencies

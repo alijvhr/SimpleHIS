@@ -10,7 +10,7 @@ from database import get_db
 from models.user import User
 from models.admission import Admission, AdmissionStatus, AdmissionType
 from models.radiology import RadiologyReport, RadiologyImage
-from auth import require_auth, require_role
+from auth import require_role
 from utils.validators import validate_image_file
 
 router = APIRouter(prefix="/radiology", tags=["radiology"])
@@ -29,7 +29,7 @@ async def radiology_admissions(
     admissions = db.query(Admission).filter(
         Admission.admission_type == AdmissionType.radiology,
         Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
-    ).all()
+    ).order_by(Admission.paid_at.asc(), Admission.created_at.asc()).all()
     
     return templates.TemplateResponse(
         "radiology/admissions.htm",
@@ -49,7 +49,13 @@ async def report_form(
     db: Session = Depends(get_db)
 ):
     """Radiology report form"""
-    admission = db.query(Admission).filter(Admission.id == admission_id).first()
+    admission = db.query(Admission).filter(
+        Admission.id == admission_id,
+        Admission.admission_type == AdmissionType.radiology,
+        Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
+    ).first()
+    if not admission:
+        return RedirectResponse(url="/radiology/admissions", status_code=302)
     report = db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first()
     
     return templates.TemplateResponse(
@@ -72,7 +78,15 @@ async def create_report(
     current_user: User = Depends(require_role(['admin', 'radiologist'])),
     db: Session = Depends(get_db)
 ):
-    """Create radiology report"""
+    """Create or update radiology report"""
+    admission = db.query(Admission).filter(
+        Admission.id == admission_id,
+        Admission.admission_type == AdmissionType.radiology,
+        Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
+    ).first()
+    if not admission:
+        return RedirectResponse(url="/radiology/admissions", status_code=302)
+
     # Handle image uploads with validation
     upload_errors = []
     validated_files = []  # Store validated file content to avoid re-reading
@@ -99,26 +113,28 @@ async def create_report(
                 
     # If there are validation errors, return to form
     if upload_errors:
-        admission = db.query(Admission).filter(Admission.id == admission_id).first()
         return templates.TemplateResponse(
             "radiology/report_form.htm",
             {
                 "request": request,
                 "current_user": current_user,
-                "active_page": "admissions",
+                "active_page": "radiology",
                 "admission": admission,
+                "report": db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first(),
                 "messages": [{"type": "danger", "text": "<br>".join(upload_errors)}]
             }
         )
     
-    # Create report
-    report = RadiologyReport(
-        admission_id=admission_id,
-        report_text=report_text,
-        created_by=current_user.id
-    )
-    
-    db.add(report)
+    report = db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first()
+    if report:
+        report.report_text = report_text
+    else:
+        report = RadiologyReport(
+            admission_id=admission_id,
+            report_text=report_text,
+            created_by=current_user.id
+        )
+        db.add(report)
     db.flush()
     
     # Save validated images (reuse already-read content)
@@ -150,8 +166,11 @@ async def complete_admission(
     db: Session = Depends(get_db)
 ):
     """Complete radiology admission"""
-    admission = db.query(Admission).filter(Admission.id == admission_id).first()
-    if admission:
+    admission = db.query(Admission).filter(
+        Admission.id == admission_id,
+        Admission.admission_type == AdmissionType.radiology
+    ).first()
+    if admission and admission.radiology_report:
         admission.status = AdmissionStatus.completed
         admission.completed_at = datetime.now(timezone.utc)
         db.commit()

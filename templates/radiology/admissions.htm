@@ -1,57 +1,60 @@
 {% extends "layout/panel.htm" %}
 
-{% block title %}رادیولوژی - سیستم اطلاعات بیمارستان{% endblock %}
+{% block title %}رادیولوژی - سامانه اطلاعات بیمارستان{% endblock %}
 
 {% block main_content %}
 <div class="card">
-    <div class="card-header">
-        <h2 class="card-title">لیست پذیرش‌های رادیولوژی</h2>
+    <div class="card-header flex-between">
+        <h2 class="card-title">صف درخواست های رادیولوژی</h2>
+        <span class="badge badge-info">{{ admissions|length }} درخواست فعال</span>
     </div>
     <div class="card-body">
         {% if admissions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>شماره</th>
-                    <th>بیمار</th>
-                    <th>کد ملی</th>
-                    <th>نوع رادیولوژی</th>
-                    <th>شرح حال</th>
-                    <th>تاریخ پذیرش</th>
-                    <th>وضعیت</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for admission in admissions %}
-                <tr>
-                    <td>{{ admission.id }}</td>
-                    <td>{{ admission.patient.full_name }}</td>
-                    <td>{{ admission.patient.national_id }}</td>
-                    <td><span class="badge badge-info">{{ admission.radiology_type }}</span></td>
-                    <td>{{ admission.description[:50] }}...</td>
-                    <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>
-                        {% if admission.radiology_report %}
-                        <span class="badge badge-success">گزارش ثبت شده</span>
-                        {% else %}
-                        <span class="badge badge-warning">در انتظار گزارش</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <a href="/radiology/report/{{ admission.id }}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-file-medical"></i>
-                            {% if admission.radiology_report %}مشاهده گزارش{% else %}ثبت گزارش{% endif %}
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>بیمار</th>
+                        <th>کد ملی</th>
+                        <th>نوع تصویربرداری</th>
+                        <th>شرح حال</th>
+                        <th>زمان پرداخت</th>
+                        <th>وضعیت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admission in admissions %}
+                    <tr>
+                        <td>#{{ admission.id }}</td>
+                        <td><strong>{{ admission.patient.full_name }}</strong></td>
+                        <td>{{ admission.patient.national_id }}</td>
+                        <td><span class="badge badge-info">{{ admission.radiology_type }}</span></td>
+                        <td>{{ admission.description|truncate(70) }}</td>
+                        <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>
+                            {% if admission.radiology_report %}
+                            <span class="badge badge-success">گزارش ثبت شده</span>
+                            {% else %}
+                            <span class="badge badge-warning">در انتظار گزارش</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/radiology/report/{{ admission.id }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-file-medical"></i>
+                                {% if admission.radiology_report %}مشاهده گزارش{% else %}ثبت گزارش{% endif %}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
-            <span>پذیرش رادیولوژی‌ای وجود ندارد</span>
+            <span>درخواست رادیولوژی آماده انجام وجود ندارد.</span>
         </div>
         {% endif %}
     </div>

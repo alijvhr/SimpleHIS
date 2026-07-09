@@ -170,6 +170,13 @@ body {
     text-align: center;
 }
 
+.nav-section {
+    padding: 1rem 1.5rem 0.35rem;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: bold;
+}
+
 /* Main Content */
 .main-content {
     flex: 1;
@@ -457,6 +464,41 @@ textarea.form-control {
     font-size: 2rem;
     color: var(--text);
     margin-top: 1rem;
+}
+
+.workflow-tile {
+    display: grid;
+    gap: 0.5rem;
+    min-height: 150px;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    text-decoration: none;
+    transition: var(--transition);
+}
+
+.workflow-tile:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px var(--shadow-hover);
+}
+
+.workflow-tile i {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--primary);
+    color: white;
+    font-size: 1.25rem;
+}
+
+.workflow-tile span {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
 }
 
 /* Utility Classes */

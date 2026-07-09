@@ -1,56 +1,76 @@
 {% extends "layout/panel.htm" %}
 
-{% block title %}تحویل نسخه - سیستم اطلاعات بیمارستان{% endblock %}
+{% block title %}تحویل نسخه - سامانه اطلاعات بیمارستان{% endblock %}
 
 {% block main_content %}
 <div class="card">
-    <div class="card-header">
-        <h2 class="card-title">نسخه‌های پرداخت شده آماده تحویل</h2>
+    <div class="card-header flex-between">
+        <h2 class="card-title">نسخه های پرداخت شده آماده تحویل</h2>
+        <span class="badge badge-info">{{ prescription_rows|length }} نسخه</span>
     </div>
     <div class="card-body">
-        {% if prescriptions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>شماره نسخه</th>
-                    <th>بیمار</th>
-                    <th>نوع</th>
-                    <th>تاریخ</th>
-                    <th>مبلغ</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for prescription in prescriptions %}
-                <tr>
-                    <td>{{ prescription.id }}</td>
-                    <td>{{ prescription.patient.full_name }}</td>
-                    <td>
-                        {% if prescription.is_manual %}
-                        <span class="badge badge-warning">نسخه دستی</span>
-                        {% else %}
-                        <span class="badge badge-info">نسخه پزشک</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
-                    <td>
-                        <a href="/pharmacy/dispense/{{ prescription.id }}" class="btn btn-primary btn-sm">
-                            <i class="fas fa-eye"></i>
-                            جزئیات و تحویل
-                        </a>
-                        <button onclick="printPrescription({{ prescription.id }})" class="btn btn-sm btn-secondary">
-                            <i class="fas fa-print"></i>
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% if prescription_rows %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>بیمار</th>
+                        <th>نوع نسخه</th>
+                        <th>اقلام</th>
+                        <th>موجودی</th>
+                        <th>تاریخ نسخه</th>
+                        <th>مبلغ</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in prescription_rows %}
+                    {% set prescription = row.prescription %}
+                    <tr>
+                        <td>#{{ prescription.id }}</td>
+                        <td>
+                            <strong>{{ prescription.patient.full_name }}</strong>
+                            <div class="muted">{{ prescription.patient.national_id }}</div>
+                        </td>
+                        <td>
+                            {% if prescription.is_manual %}
+                            <span class="badge badge-warning">نسخه دستی</span>
+                            {% else %}
+                            <span class="badge badge-info">نسخه پزشک</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.item_count }}</td>
+                        <td>
+                            {% if row.stock.ready %}
+                            <span class="badge badge-success">آماده تحویل</span>
+                            {% else %}
+                            <span class="badge badge-danger">کسری موجودی</span>
+                            <div class="muted">{{ row.stock.warnings|join(' | ') }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
+                        <td>
+                            <div class="action-row">
+                                <a href="/pharmacy/dispense/{{ prescription.id }}" class="btn btn-primary btn-sm">
+                                    <i class="fas fa-eye"></i>
+                                    جزئیات و تحویل
+                                </a>
+                                <button onclick="printPrescription({{ prescription.id }})" class="btn btn-sm btn-secondary" type="button" aria-label="چاپ نسخه">
+                                    <i class="fas fa-print"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
-            <span>نسخه‌ای آماده تحویل وجود ندارد</span>
+            <span>نسخه ای آماده تحویل وجود ندارد.</span>
         </div>
         {% endif %}
     </div>

@@ -1,48 +1,50 @@
 {% extends "layout/panel.htm" %}
 
-{% block title %}بیماران پزشک - سیستم اطلاعات بیمارستان{% endblock %}
+{% block title %}صف ویزیت پزشک - سامانه اطلاعات بیمارستان{% endblock %}
 
 {% block main_content %}
 <div class="card">
-    <div class="card-header">
-        <h2 class="card-title">لیست بیماران پذیرش شده</h2>
+    <div class="card-header flex-between">
+        <h2 class="card-title">صف بیماران پرداخت شده</h2>
+        <span class="badge badge-info">{{ admissions|length }} بیمار در انتظار ویزیت</span>
     </div>
     <div class="card-body">
         {% if admissions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>شماره پذیرش</th>
-                    <th>بیمار</th>
-                    <th>کد ملی</th>
-                    <th>علت مراجعه</th>
-                    <th>تاریخ پذیرش</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for admission in admissions %}
-                <tr>
-                    <td>{{ admission.id }}</td>
-                    <td>{{ admission.patient.full_name }}</td>
-                    <td>{{ admission.patient.national_id }}</td>
-                    <td>{{ admission.description[:80] }}...</td>
-                    <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
-                    <td>
-                        <a href="/doctor/patient/{{ admission.patient_id }}/admission/{{ admission.id }}" 
-                           class="btn btn-primary btn-sm">
-                            <i class="fas fa-folder-open"></i>
-                            پرونده بیمار
-                        </a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره پذیرش</th>
+                        <th>بیمار</th>
+                        <th>کد ملی</th>
+                        <th>علت مراجعه</th>
+                        <th>زمان پرداخت</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admission in admissions %}
+                    <tr>
+                        <td>#{{ admission.id }}</td>
+                        <td><strong>{{ admission.patient.full_name }}</strong></td>
+                        <td>{{ admission.patient.national_id }}</td>
+                        <td>{{ admission.description|truncate(80) }}</td>
+                        <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>
+                            <a href="/doctor/patient/{{ admission.patient_id }}/admission/{{ admission.id }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-folder-open"></i>
+                                ورود به پرونده
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle"></i>
-            <span>بیماری در صف ویزیت وجود ندارد</span>
+            <span>بیماری در صف ویزیت وجود ندارد.</span>
         </div>
         {% endif %}
     </div>

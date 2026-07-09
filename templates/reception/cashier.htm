@@ -5,25 +5,30 @@
 {% block main_content %}
 <div class="card">
     <div class="card-header flex-between">
-        <h2 class="card-title">صندوق پذیرش و داروخانه</h2>
+        <h2 class="card-title">صندوق خدمات درمانی</h2>
         <div class="queue-stats">
             <span class="badge badge-warning">{{ waiting_admissions|length }} پذیرش</span>
             <span class="badge badge-info">{{ waiting_prescriptions|length }} نسخه</span>
+            <span class="badge badge-success">{{ waiting_lab_orders|length }} آزمایش</span>
         </div>
     </div>
     <div class="card-body">
         <div class="cashier-summary">
             <div>
-                <span>کل درخواست‌های قابل پرداخت</span>
-                <strong>{{ waiting_admissions|length + waiting_prescriptions|length }}</strong>
+                <span>کل درخواست های قابل پرداخت</span>
+                <strong>{{ waiting_admissions|length + waiting_prescriptions|length + waiting_lab_orders|length }}</strong>
             </div>
             <div>
-                <span>مسیر پس از پرداخت پذیرش</span>
+                <span>پس از پرداخت پذیرش</span>
                 <strong>صف پزشک / رادیولوژی</strong>
             </div>
             <div>
-                <span>مسیر پس از پرداخت نسخه</span>
+                <span>پس از پرداخت نسخه</span>
                 <strong>صف تحویل دارو</strong>
+            </div>
+            <div>
+                <span>پس از پرداخت آزمایش</span>
+                <strong>صف نمونه گیری</strong>
             </div>
         </div>
     </div>
@@ -31,7 +36,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title">پذیرش‌های در انتظار پرداخت</h2>
+        <h2 class="card-title">پذیرش های در انتظار پرداخت</h2>
     </div>
     <div class="card-body">
         {% if waiting_admissions %}
@@ -51,9 +56,7 @@
                 </thead>
                 <tbody>
                     {% for admission in waiting_admissions %}
-                    <tr class="cashier-row"
-                        data-gross="{{ admission.price }}"
-                        data-row-id="admission-{{ admission.id }}">
+                    <tr class="cashier-row" data-gross="{{ admission.price }}" data-row-id="admission-{{ admission.id }}">
                         <td>#{{ admission.id }}</td>
                         <td>
                             <strong>{{ admission.patient.full_name }}</strong>
@@ -90,18 +93,11 @@
                             <div class="action-row">
                                 <form id="pay-admission-{{ admission.id }}" method="POST" action="/reception/cashier/pay-admission">
                                     <input type="hidden" name="admission_id" value="{{ admission.id }}">
-                                    <button type="submit" class="btn btn-success btn-sm">
-                                        <i class="fas fa-money-bill"></i>
-                                        پرداخت
-                                    </button>
+                                    <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-money-bill"></i> پرداخت</button>
                                 </form>
-                                <form method="POST" action="/reception/cashier/cancel-admission"
-                                      onsubmit="return confirm('آیا از لغو این پذیرش اطمینان دارید؟');">
+                                <form method="POST" action="/reception/cashier/cancel-admission" onsubmit="return confirm('از لغو این پذیرش مطمئن هستید؟');">
                                     <input type="hidden" name="admission_id" value="{{ admission.id }}">
-                                    <button type="submit" class="btn btn-danger btn-sm">
-                                        <i class="fas fa-times"></i>
-                                        لغو
-                                    </button>
+                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-times"></i> لغو</button>
                                 </form>
                             </div>
                         </td>
@@ -111,20 +107,17 @@
             </table>
         </div>
         {% else %}
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i>
-            <span>پذیرشی در انتظار پرداخت وجود ندارد.</span>
-        </div>
+        <div class="alert alert-info"><i class="fas fa-info-circle"></i><span>پذیرشی در انتظار پرداخت وجود ندارد.</span></div>
         {% endif %}
     </div>
 </div>
 
 <div class="card">
     <div class="card-header">
-        <h2 class="card-title">نسخه‌های در انتظار پرداخت</h2>
+        <h2 class="card-title">نسخه های در انتظار پرداخت</h2>
     </div>
     <div class="card-body">
-        {% if waiting_prescriptions %}
+        {% if prescription_rows %}
         <div class="table-responsive">
             <table class="table">
                 <thead>
@@ -132,24 +125,33 @@
                         <th>شماره نسخه</th>
                         <th>بیمار</th>
                         <th>نوع</th>
+                        <th>اقلام</th>
+                        <th>وضعیت موجودی</th>
                         <th>مبلغ کل</th>
                         <th>تاریخ</th>
                         <th>عملیات</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for prescription in waiting_prescriptions %}
+                    {% for row in prescription_rows %}
+                    {% set prescription = row.prescription %}
                     <tr>
                         <td>#{{ prescription.id }}</td>
-                        <td>
-                            <strong>{{ prescription.patient.full_name }}</strong>
-                            <div class="muted">{{ prescription.patient.national_id }}</div>
-                        </td>
+                        <td><strong>{{ prescription.patient.full_name }}</strong><div class="muted">{{ prescription.patient.national_id }}</div></td>
                         <td>
                             {% if prescription.is_manual %}
                             <span class="badge badge-warning">نسخه دستی</span>
                             {% else %}
                             <span class="badge badge-info">نسخه پزشک</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.item_count }}</td>
+                        <td>
+                            {% if row.stock_ready %}
+                            <span class="badge badge-success">قابل ارسال به داروخانه</span>
+                            {% else %}
+                            <span class="badge badge-warning">نیازمند بررسی داروخانه</span>
+                            <div class="muted">{{ row.shortages|join(' | ') }}</div>
                             {% endif %}
                         </td>
                         <td><strong>{{ "{:,}".format(prescription.total_amount|int) }}</strong> تومان</td>
@@ -158,18 +160,11 @@
                             <div class="action-row">
                                 <form method="POST" action="/reception/cashier/pay-prescription">
                                     <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
-                                    <button type="submit" class="btn btn-success btn-sm">
-                                        <i class="fas fa-money-bill"></i>
-                                        پرداخت
-                                    </button>
+                                    <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-money-bill"></i> پرداخت</button>
                                 </form>
-                                <form method="POST" action="/reception/cashier/cancel-prescription"
-                                      onsubmit="return confirm('آیا از لغو این نسخه اطمینان دارید؟');">
+                                <form method="POST" action="/reception/cashier/cancel-prescription" onsubmit="return confirm('از لغو این نسخه مطمئن هستید؟');">
                                     <input type="hidden" name="prescription_id" value="{{ prescription.id }}">
-                                    <button type="submit" class="btn btn-danger btn-sm">
-                                        <i class="fas fa-times"></i>
-                                        لغو
-                                    </button>
+                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-times"></i> لغو</button>
                                 </form>
                             </div>
                         </td>
@@ -179,10 +174,63 @@
             </table>
         </div>
         {% else %}
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle"></i>
-            <span>نسخه‌ای در انتظار پرداخت وجود ندارد.</span>
+        <div class="alert alert-info"><i class="fas fa-info-circle"></i><span>نسخه ای در انتظار پرداخت وجود ندارد.</span></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">درخواست های آزمایشگاه در انتظار پرداخت</h2>
+    </div>
+    <div class="card-body">
+        {% if waiting_lab_orders %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>بیمار</th>
+                        <th>آزمایش ها</th>
+                        <th>مبلغ کل</th>
+                        <th>تاریخ</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lab_order in waiting_lab_orders %}
+                    <tr>
+                        <td>#{{ lab_order.id }}</td>
+                        <td><strong>{{ lab_order.patient.full_name }}</strong><div class="muted">{{ lab_order.patient.national_id }}</div></td>
+                        <td>
+                            {% for item in lab_order.items[:4] %}
+                            <span class="badge badge-info">{{ item.test.code }}</span>
+                            {% endfor %}
+                            {% if lab_order.items|length > 4 %}
+                            <span class="muted">+{{ lab_order.items|length - 4 }}</span>
+                            {% endif %}
+                        </td>
+                        <td><strong>{{ "{:,}".format(lab_order.total_amount|int) }}</strong> تومان</td>
+                        <td>{{ lab_order.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>
+                            <div class="action-row">
+                                <form method="POST" action="/reception/cashier/pay-lab-order">
+                                    <input type="hidden" name="lab_order_id" value="{{ lab_order.id }}">
+                                    <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-money-bill"></i> پرداخت</button>
+                                </form>
+                                <form method="POST" action="/reception/cashier/cancel-lab-order" onsubmit="return confirm('از لغو این درخواست آزمایش مطمئن هستید؟');">
+                                    <input type="hidden" name="lab_order_id" value="{{ lab_order.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm"><i class="fas fa-times"></i> لغو</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
+        {% else %}
+        <div class="alert alert-info"><i class="fas fa-info-circle"></i><span>درخواست آزمایشی در انتظار پرداخت وجود ندارد.</span></div>
         {% endif %}
     </div>
 </div>

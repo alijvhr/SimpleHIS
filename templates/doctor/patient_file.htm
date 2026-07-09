@@ -4,193 +4,448 @@
 
 {% block extra_css %}
 <style>
-.drug-suggestions {
+.order-suggestions {
     position: absolute;
+    inset-inline: 0;
+    top: calc(100% + 2px);
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: 6px;
     box-shadow: 0 4px 8px var(--shadow);
-    max-height: 200px;
+    max-height: 220px;
     overflow-y: auto;
     z-index: 1000;
     display: none;
-    margin-top: 2px;
-    width: 100%;
 }
-
 .suggestion-item {
     padding: 0.75rem;
     cursor: pointer;
     border-bottom: 1px solid var(--border);
 }
-
-.suggestion-item:hover {
-    background: var(--bg);
-}
-
-.suggestion-item:last-child {
-    border-bottom: none;
-}
+.suggestion-item:hover { background: var(--bg); }
+.suggestion-item:last-child { border-bottom: none; }
+.clinical-section { margin-top: 1.5rem; }
+.clinical-section .card-header { align-items: center; }
+.search-cell { position: relative; min-width: 240px; }
+.order-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
 </style>
 {% endblock %}
 
 {% block main_content %}
+{% if request.query_params.get('saved') == '1' %}
+<div class="alert alert-success">
+    <i class="fas fa-check-circle"></i>
+    <span>دستورات پزشک ثبت شد و موارد قابل پرداخت به صندوق ارسال شدند.</span>
+</div>
+{% endif %}
+
 <div class="card">
-    <div class="card-header">
+    <div class="card-header flex-between">
         <h2 class="card-title">پرونده بیمار: {{ patient.full_name }}</h2>
-    </div>
-    <div class="card-body">
-        <!-- Patient Info -->
-        <div class="grid grid-4 mb-4">
-            <div>
-                <strong>کد ملی:</strong> {{ patient.national_id }}
-            </div>
-            <div>
-                <strong>تلفن:</strong> {{ patient.phone }}
-            </div>
-            <div>
-                <strong>تاریخ تولد:</strong> {{ patient.birth_date }}
-            </div>
-            <div>
-                <strong>جنسیت:</strong>
-                {% if patient.gender.value == 'male' %}مرد
-                {% elif patient.gender.value == 'female' %}زن
-                {% else %}سایر{% endif %}
-            </div>
-        </div>
-        
-        <!-- Current Admission -->
-        <div class="alert alert-info mb-4">
-            <strong>علت مراجعه:</strong> {{ admission.description }}
-        </div>
-        
-        <!-- Previous Prescriptions -->
-        {% if previous_prescriptions %}
-        <h3 class="mb-3">نسخه‌های قبلی</h3>
-        <table class="table mb-4">
-            <thead>
-                <tr>
-                    <th>شماره نسخه</th>
-                    <th>تاریخ</th>
-                    <th>مبلغ</th>
-                    <th>وضعیت</th>
-                    <th>عملیات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for presc in previous_prescriptions %}
-                <tr>
-                    <td>{{ presc.id }}</td>
-                    <td>{{ presc.created_at.strftime('%Y/%m/%d') }}</td>
-                    <td>{{ "{:,}".format(presc.total_amount|int) }} تومان</td>
-                    <td>
-                        {% if presc.status.value == 'dispensed' %}
-                        <span class="badge badge-success">تحویل شده</span>
-                        {% elif presc.status.value == 'paid' %}
-                        <span class="badge badge-info">پرداخت شده</span>
-                        {% else %}
-                        <span class="badge badge-warning">در انتظار پرداخت</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button onclick="printPrescription({{ presc.id }})" class="btn btn-sm btn-secondary">
-                            <i class="fas fa-print"></i>
-                            چاپ
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% endif %}
-        
-        <!-- Prescription Form -->
-        <h3 class="mb-3">نسخه جدید</h3>
-        <form method="POST" action="/doctor/prescription/create" id="prescriptionForm">
-            <input type="hidden" name="patient_id" value="{{ patient.id }}">
-            <input type="hidden" name="admission_id" value="{{ admission.id }}">
-            <input type="hidden" name="total_amount" value="0">
-            
-            <div class="table-responsive">
-                <table class="table" id="prescriptionTable">
-                    <thead>
-                        <tr>
-                            <th style="width: 50px;">#</th>
-                            <th style="width: 250px;">دارو</th>
-                            <th>شرکت سازنده</th>
-                            <th>فرم</th>
-                            <th>دوز</th>
-                            <th style="width: 80px;">تعداد</th>
-                            <th style="width: 200px;">دستور مصرف</th>
-                            <th>قیمت واحد</th>
-                            <th>جمع</th>
-                            <th style="width: 70px;"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>1</td>
-                            <td style="position: relative;">
-                                <input type="text" class="form-control drug-search" 
-                                       name="drug_search_0" 
-                                       placeholder="جستجوی دارو..." 
-                                       autocomplete="off"
-                                       onkeyup="searchDrug(this)">
-                                <input type="hidden" class="drug-id" name="drug_id[]">
-                                <div class="drug-suggestions"></div>
-                            </td>
-                            <td class="drug-manufacturer">-</td>
-                            <td class="drug-form">-</td>
-                            <td class="drug-dosage">-</td>
-                            <td>
-                                <input type="number" class="form-control drug-quantity" 
-                                       name="quantity[]" min="1" value="1" 
-                                       onchange="calculatePrescriptionTotal()">
-                            </td>
-                            <td>
-                                <input type="text" class="form-control drug-instructions" 
-                                       name="instructions[]" 
-                                       placeholder="دستور مصرف">
-                            </td>
-                            <td class="drug-price">0</td>
-                            <td class="drug-total">0</td>
-                            <td>
-                                <button type="button" class="btn btn-danger btn-sm" onclick="removePrescriptionRow(this)">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="8" class="text-left"><strong>جمع کل:</strong></td>
-                            <td colspan="2">
-                                <strong id="prescriptionTotalAmount">0</strong> تومان
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-            
-            <div class="flex-gap mt-3">
-                <button type="button" id="addPrescriptionRow" class="btn btn-secondary">
-                    <i class="fas fa-plus"></i>
-                    افزودن دارو
-                </button>
-                <button type="submit" class="btn btn-success">
-                    <i class="fas fa-save"></i>
-                    ثبت نسخه
-                </button>
-            </div>
-        </form>
-        
-        <!-- Complete Visit -->
-        <form method="POST" action="/doctor/complete/{{ admission.id }}" class="mt-4" onsubmit="return confirm('آیا از اتمام ویزیت اطمینان دارید؟');">
+        <form method="POST" action="/doctor/complete/{{ admission.id }}" onsubmit="return confirm('از اتمام ویزیت مطمئن هستید؟');">
             <button type="submit" class="btn btn-primary">
                 <i class="fas fa-check-circle"></i>
                 اتمام ویزیت
             </button>
         </form>
     </div>
+    <div class="card-body">
+        <div class="grid grid-4 mb-4">
+            <div><strong>کد ملی:</strong> {{ patient.national_id }}</div>
+            <div><strong>تلفن:</strong> {{ patient.phone }}</div>
+            <div><strong>تاریخ تولد:</strong> {{ patient.birth_date }}</div>
+            <div>
+                <strong>جنسیت:</strong>
+                {% if patient.gender.value == 'male' %}مرد{% elif patient.gender.value == 'female' %}زن{% else %}سایر{% endif %}
+            </div>
+        </div>
+        <div class="alert alert-info">
+            <strong>علت مراجعه:</strong> {{ admission.description }}
+        </div>
+    </div>
 </div>
+
+<form method="POST" action="/doctor/orders/create" id="clinicalOrderForm">
+    <input type="hidden" name="patient_id" value="{{ patient.id }}">
+    <input type="hidden" name="admission_id" value="{{ admission.id }}">
+
+    <div class="card clinical-section">
+        <div class="card-header flex-between">
+            <h2 class="card-title">نسخه دارویی</h2>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addDrugRow()">
+                <i class="fas fa-plus"></i>
+                افزودن دارو
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="drugTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>دارو</th>
+                            <th>فرم / دوز</th>
+                            <th>تعداد</th>
+                            <th>دستور مصرف</th>
+                            <th>قیمت واحد</th>
+                            <th>جمع</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="6" class="text-left"><strong>جمع نسخه:</strong></td>
+                            <td colspan="2"><strong id="drugTotal">0</strong> تومان</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card clinical-section">
+        <div class="card-header flex-between">
+            <h2 class="card-title">درخواست آزمایش</h2>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addLabRow()">
+                <i class="fas fa-plus"></i>
+                افزودن آزمایش
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label>یادداشت بالینی برای آزمایشگاه</label>
+                <textarea class="form-control" name="lab_clinical_note" rows="2" placeholder="تشخیص احتمالی، شرایط نمونه گیری یا توضیح تکمیلی"></textarea>
+            </div>
+            <div class="table-responsive">
+                <table class="table" id="labTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>آزمایش</th>
+                            <th>نمونه / واحد</th>
+                            <th>محدوده مرجع</th>
+                            <th>یادداشت</th>
+                            <th>قیمت</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" class="text-left"><strong>جمع آزمایش:</strong></td>
+                            <td colspan="2"><strong id="labTotal">0</strong> تومان</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card clinical-section">
+        <div class="card-header flex-between">
+            <h2 class="card-title">درخواست رادیولوژی</h2>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="addRadiologyRow()">
+                <i class="fas fa-plus"></i>
+                افزودن تصویربرداری
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="radiologyTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>نوع تصویربرداری</th>
+                            <th>شرح درخواست</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card clinical-section">
+        <div class="card-body">
+            <div class="order-summary-grid">
+                <div><span class="muted">نسخه</span><strong id="summaryDrugTotal">0 تومان</strong></div>
+                <div><span class="muted">آزمایش</span><strong id="summaryLabTotal">0 تومان</strong></div>
+                <div><span class="muted">رادیولوژی</span><strong id="summaryRadiologyCount">0 درخواست</strong></div>
+            </div>
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-save"></i>
+                    ثبت دستورات و ارسال به صندوق
+                </button>
+                <a href="/doctor/patients" class="btn btn-secondary">بازگشت به صف</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="grid grid-3 mt-4">
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">نسخه های قبلی</h3></div>
+        <div class="card-body">
+            {% if previous_prescriptions %}
+            {% for presc in previous_prescriptions %}
+            <div class="mb-2">
+                <strong>#{{ presc.id }}</strong>
+                <span class="muted">{{ presc.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="badge badge-info">{{ presc.status.value }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="muted">سابقه نسخه ثبت نشده است.</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">آزمایش های قبلی</h3></div>
+        <div class="card-body">
+            {% if previous_lab_orders %}
+            {% for order in previous_lab_orders %}
+            <div class="mb-2">
+                <strong>#{{ order.id }}</strong>
+                <span class="muted">{{ order.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="badge badge-info">{{ order.status.value }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="muted">سابقه آزمایش ثبت نشده است.</div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3 class="card-title">رادیولوژی قبلی</h3></div>
+        <div class="card-body">
+            {% if previous_radiology %}
+            {% for item in previous_radiology %}
+            <div class="mb-2">
+                <strong>{{ item.radiology_type or 'تصویربرداری' }}</strong>
+                <span class="muted">{{ item.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="badge badge-info">{{ item.status.value }}</span>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="muted">سابقه رادیولوژی ثبت نشده است.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+const money = value => Number(value || 0).toLocaleString('fa-IR');
+let drugIndex = 0;
+let labIndex = 0;
+let radiologyIndex = 0;
+let searchTimer = null;
+
+function renumber(tableId) {
+    document.querySelectorAll(`#${tableId} tbody tr`).forEach((row, index) => {
+        row.querySelector('.row-number').textContent = index + 1;
+    });
+}
+
+function removeRow(button, tableId) {
+    button.closest('tr').remove();
+    renumber(tableId);
+    updateTotals();
+}
+
+function addDrugRow() {
+    const tbody = document.querySelector('#drugTable tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td class="row-number"></td>
+        <td class="search-cell">
+            <input type="text" class="form-control drug-search" placeholder="جستجوی دارو..." autocomplete="off">
+            <input type="hidden" name="drug_id[]" class="drug-id">
+            <div class="order-suggestions"></div>
+        </td>
+        <td class="drug-meta muted">-</td>
+        <td><input type="number" class="form-control drug-quantity" name="quantity[]" min="1" value="1"></td>
+        <td><input type="text" class="form-control drug-instructions" name="instructions[]" placeholder="مثلا هر ۸ ساعت یک عدد"></td>
+        <td class="drug-price" data-price="0">0</td>
+        <td class="drug-row-total">0</td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this, 'drugTable')"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    row.querySelector('.drug-search').addEventListener('input', event => searchDrug(event.target));
+    row.querySelector('.drug-quantity').addEventListener('input', updateTotals);
+    renumber('drugTable');
+}
+
+function addLabRow() {
+    const tbody = document.querySelector('#labTable tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td class="row-number"></td>
+        <td class="search-cell">
+            <input type="text" class="form-control lab-search" placeholder="جستجوی آزمایش..." autocomplete="off">
+            <input type="hidden" name="lab_test_id[]" class="lab-test-id">
+            <div class="order-suggestions"></div>
+        </td>
+        <td class="lab-sample muted">-</td>
+        <td class="lab-range muted">-</td>
+        <td><input type="text" class="form-control" name="lab_note[]" placeholder="اختیاری"></td>
+        <td class="lab-price" data-price="0">0</td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this, 'labTable')"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    row.querySelector('.lab-search').addEventListener('input', event => searchLab(event.target));
+    renumber('labTable');
+}
+
+function addRadiologyRow() {
+    const tbody = document.querySelector('#radiologyTable tbody');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td class="row-number"></td>
+        <td>
+            <select class="form-control radiology-type" name="radiology_type[]">
+                <option value="">انتخاب کنید</option>
+                <option value="X-Ray">X-Ray</option>
+                <option value="Ultrasound">Ultrasound</option>
+                <option value="CT Scan">CT Scan</option>
+                <option value="MRI">MRI</option>
+                <option value="Mammography">Mammography</option>
+                <option value="Doppler">Doppler</option>
+            </select>
+        </td>
+        <td><input type="text" class="form-control" name="radiology_description[]" placeholder="ناحیه، سمت و دلیل درخواست"></td>
+        <td><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this, 'radiologyTable')"><i class="fas fa-trash"></i></button></td>
+    `;
+    tbody.appendChild(row);
+    row.querySelector('.radiology-type').addEventListener('change', updateTotals);
+    renumber('radiologyTable');
+    updateTotals();
+}
+
+function searchDrug(input) {
+    const query = input.value.trim();
+    clearTimeout(searchTimer);
+    if (query.length < 2) {
+        hideSuggestions(input);
+        return;
+    }
+    searchTimer = setTimeout(() => {
+        fetch(`/api/drugs/search?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(items => showSuggestions(input, items, selectDrug));
+    }, 250);
+}
+
+function searchLab(input) {
+    const query = input.value.trim();
+    clearTimeout(searchTimer);
+    if (query.length < 2) {
+        hideSuggestions(input);
+        return;
+    }
+    searchTimer = setTimeout(() => {
+        fetch(`/api/lab-tests/search?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(items => showSuggestions(input, items, selectLab));
+    }, 250);
+}
+
+function showSuggestions(input, items, handler) {
+    const box = input.parentElement.querySelector('.order-suggestions');
+    box.innerHTML = '';
+    if (!items.length) {
+        hideSuggestions(input);
+        return;
+    }
+    items.forEach(item => {
+        const option = document.createElement('div');
+        option.className = 'suggestion-item';
+        option.textContent = item.code ? `${item.code} - ${item.name}` : `${item.name} - ${item.form || ''} ${item.dosage || ''}`;
+        option.addEventListener('click', () => handler(input, item));
+        box.appendChild(option);
+    });
+    box.style.display = 'block';
+}
+
+function selectDrug(input, drug) {
+    const row = input.closest('tr');
+    input.value = drug.name;
+    row.querySelector('.drug-id').value = drug.id;
+    row.querySelector('.drug-meta').textContent = `${drug.form || '-'} / ${drug.dosage || '-'}`;
+    row.querySelector('.drug-instructions').value = drug.default_instructions || '';
+    row.querySelector('.drug-price').dataset.price = drug.price || 0;
+    row.querySelector('.drug-price').textContent = money(drug.price);
+    hideSuggestions(input);
+    updateTotals();
+}
+
+function selectLab(input, test) {
+    const row = input.closest('tr');
+    input.value = `${test.code} - ${test.name}`;
+    row.querySelector('.lab-test-id').value = test.id;
+    row.querySelector('.lab-sample').textContent = `${test.sample_type || '-'} / ${test.unit || '-'}`;
+    row.querySelector('.lab-range').textContent = `مرد: ${test.male_normal_range || '-'} | زن: ${test.female_normal_range || '-'}`;
+    row.querySelector('.lab-price').dataset.price = test.price || 0;
+    row.querySelector('.lab-price').textContent = money(test.price);
+    hideSuggestions(input);
+    updateTotals();
+}
+
+function hideSuggestions(input) {
+    const box = input.parentElement.querySelector('.order-suggestions');
+    if (box) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+    }
+}
+
+function updateTotals() {
+    let drugTotal = 0;
+    document.querySelectorAll('#drugTable tbody tr').forEach(row => {
+        const price = Number(row.querySelector('.drug-price').dataset.price || 0);
+        const quantity = Number(row.querySelector('.drug-quantity').value || 1);
+        const total = price * quantity;
+        row.querySelector('.drug-row-total').textContent = money(total);
+        drugTotal += total;
+    });
+
+    let labTotal = 0;
+    document.querySelectorAll('#labTable tbody tr').forEach(row => {
+        labTotal += Number(row.querySelector('.lab-price').dataset.price || 0);
+    });
+
+    const radiologyCount = Array.from(document.querySelectorAll('.radiology-type')).filter(input => input.value).length;
+    document.getElementById('drugTotal').textContent = money(drugTotal);
+    document.getElementById('labTotal').textContent = money(labTotal);
+    document.getElementById('summaryDrugTotal').textContent = `${money(drugTotal)} تومان`;
+    document.getElementById('summaryLabTotal').textContent = `${money(labTotal)} تومان`;
+    document.getElementById('summaryRadiologyCount').textContent = `${radiologyCount} درخواست`;
+}
+
+document.addEventListener('click', event => {
+    if (!event.target.closest('.search-cell')) {
+        document.querySelectorAll('.order-suggestions').forEach(box => {
+            box.style.display = 'none';
+            box.innerHTML = '';
+        });
+    }
+});
+
+document.getElementById('clinicalOrderForm').addEventListener('submit', event => {
+    const hasDrug = Array.from(document.querySelectorAll('.drug-id')).some(input => input.value);
+    const hasLab = Array.from(document.querySelectorAll('.lab-test-id')).some(input => input.value);
+    const hasRadiology = Array.from(document.querySelectorAll('.radiology-type')).some(input => input.value);
+    if (!hasDrug && !hasLab && !hasRadiology) {
+        event.preventDefault();
+        alert('حداقل یک دارو، آزمایش یا درخواست رادیولوژی ثبت کنید.');
+    }
+});
+
+addDrugRow();
+addLabRow();
+addRadiologyRow();
+updateTotals();
+</script>
 {% endblock %}

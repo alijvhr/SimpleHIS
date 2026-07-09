@@ -42,6 +42,7 @@
                         <option value="admin" {% if user and user.role.value == 'admin' %}selected{% endif %}>مدیرکل</option>
                         <option value="reception" {% if user and user.role.value == 'reception' %}selected{% endif %}>پذیرش</option>
                         <option value="doctor" {% if user and user.role.value == 'doctor' %}selected{% endif %}>پزشک</option>
+                        <option value="laboratory" {% if user and user.role.value == 'laboratory' %}selected{% endif %}>آزمایشگاه</option>
                         <option value="radiologist" {% if user and user.role.value == 'radiologist' %}selected{% endif %}>رادیولوژیست</option>
                         <option value="pharmacy" {% if user and user.role.value == 'pharmacy' %}selected{% endif %}>داروخانه</option>
                     </select>

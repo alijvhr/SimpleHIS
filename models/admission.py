@@ -10,6 +10,7 @@ def utc_now():
 
 class AdmissionType(str, enum.Enum):
     doctor = "doctor"
+    laboratory = "laboratory"
     radiology = "radiology"
 
 class AdmissionStatus(str, enum.Enum):

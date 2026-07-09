@@ -1,0 +1,82 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}آزمایشگاه - سامانه اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">صف کاری آزمایشگاه</h2>
+        <div class="queue-stats">
+            <span class="badge badge-warning">{{ orders|selectattr('status.value', 'equalto', 'waiting_payment')|list|length }} در انتظار پرداخت</span>
+            <span class="badge badge-info">{{ orders|selectattr('status.value', 'equalto', 'paid')|list|length }} آماده نمونه گیری</span>
+            <span class="badge badge-success">{{ orders|selectattr('status.value', 'equalto', 'resulted')|list|length }} نتیجه شده</span>
+        </div>
+    </div>
+    <div class="card-body">
+        {% if orders %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>بیمار</th>
+                        <th>آزمایش ها</th>
+                        <th>یادداشت بالینی</th>
+                        <th>مبلغ</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ درخواست</th>
+                        <th>عملیات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                    <tr>
+                        <td>#{{ order.id }}</td>
+                        <td>
+                            <strong>{{ order.patient.full_name }}</strong>
+                            <div class="muted">{{ order.patient.national_id }}</div>
+                        </td>
+                        <td>
+                            {% for item in order.items[:5] %}
+                            <span class="badge badge-info">{{ item.test.code }}</span>
+                            {% endfor %}
+                            {% if order.items|length > 5 %}<span class="muted">+{{ order.items|length - 5 }}</span>{% endif %}
+                        </td>
+                        <td>{{ order.clinical_note or '-' }}</td>
+                        <td><strong>{{ "{:,}".format(order.total_amount|int) }}</strong> تومان</td>
+                        <td>
+                            {% if order.status.value == 'waiting_payment' %}
+                            <span class="badge badge-warning">در انتظار پرداخت</span>
+                            {% elif order.status.value == 'paid' %}
+                            <span class="badge badge-info">آماده نمونه گیری</span>
+                            {% elif order.status.value == 'collected' %}
+                            <span class="badge badge-secondary">نمونه دریافت شد</span>
+                            {% elif order.status.value == 'resulted' %}
+                            <span class="badge badge-success">نتیجه ثبت شد</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ order.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>
+                            <div class="action-row">
+                                {% if order.status.value == 'paid' %}
+                                <form method="POST" action="/lab/orders/{{ order.id }}/collect">
+                                    <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-vial"></i> دریافت نمونه</button>
+                                </form>
+                                {% endif %}
+                                {% if order.status.value in ['paid', 'collected', 'resulted'] %}
+                                <a href="/lab/orders/{{ order.id }}/results" class="btn btn-success btn-sm"><i class="fas fa-keyboard"></i> ثبت نتیجه</a>
+                                <a href="/lab/orders/{{ order.id }}/report" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i> گزارش</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info"><i class="fas fa-info-circle"></i><span>درخواستی برای آزمایشگاه ثبت نشده است.</span></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

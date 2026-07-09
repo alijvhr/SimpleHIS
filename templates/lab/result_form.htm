@@ -1,0 +1,120 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}ثبت نتیجه آزمایش - سامانه اطلاعات بیمارستان{% endblock %}
+
+{% block extra_css %}
+<style>
+.result-low, .result-high { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.1); }
+.result-normal { border-color: var(--success); }
+.flag-text { display: block; margin-top: 0.25rem; font-size: 0.875rem; }
+.flag-low, .flag-high { color: var(--danger); }
+.flag-normal { color: var(--success); }
+</style>
+{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">ثبت نتیجه درخواست #{{ order.id }}</h2>
+        <a href="/lab/orders" class="btn btn-secondary btn-sm"><i class="fas fa-arrow-right"></i> بازگشت</a>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <div class="grid grid-4">
+                <div><strong>بیمار:</strong> {{ order.patient.full_name }}</div>
+                <div><strong>کد ملی:</strong> {{ order.patient.national_id }}</div>
+                <div><strong>جنسیت:</strong> {{ order.patient.gender.value }}</div>
+                <div><strong>وضعیت:</strong> {{ order.status.value }}</div>
+            </div>
+        </div>
+
+        <form method="POST" action="/lab/orders/{{ order.id }}/results">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>آزمایش</th>
+                            <th>نمونه</th>
+                            <th>محدوده نرمال</th>
+                            <th>نتیجه</th>
+                            <th>واحد</th>
+                            <th>هشدار</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order.items %}
+                        {% set range = item.test.female_normal_range if order.patient.gender.value == 'female' else item.test.male_normal_range %}
+                        <tr>
+                            <td>
+                                <strong>{{ item.test.code }}</strong>
+                                <div class="muted">{{ item.test.name }}</div>
+                                <input type="hidden" name="item_id[]" value="{{ item.id }}">
+                            </td>
+                            <td>{{ item.test.sample_type or '-' }}</td>
+                            <td class="normal-range">{{ range or '-' }}</td>
+                            <td>
+                                <input type="text" name="result_value[]" class="form-control lab-result-input"
+                                       value="{{ item.result.value if item.result else '' }}"
+                                       data-range="{{ range or '' }}">
+                            </td>
+                            <td>{{ item.test.unit or '-' }}</td>
+                            <td>
+                                <span class="flag-text {% if item.result and item.result.flag %}flag-{{ item.result.flag }}{% endif %}">
+                                    {% if item.result and item.result.flag == 'low' %}پایین{% elif item.result and item.result.flag == 'high' %}بالا{% elif item.result and item.result.flag == 'normal' %}طبیعی{% else %}-{% endif %}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex-gap mt-3">
+                <button type="submit" class="btn btn-success"><i class="fas fa-save"></i> ذخیره نتایج</button>
+                <a href="/lab/orders/{{ order.id }}/report" class="btn btn-secondary"><i class="fas fa-file-medical-alt"></i> مشاهده گزارش</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function parseRange(text) {
+    const numbers = String(text || '').match(/-?\d+(\.\d+)?/g) || [];
+    if (numbers.length >= 2) return [Math.min(Number(numbers[0]), Number(numbers[1])), Math.max(Number(numbers[0]), Number(numbers[1]))];
+    if (numbers.length === 1 && String(text).trim().startsWith('<')) return [null, Number(numbers[0])];
+    if (numbers.length === 1 && String(text).trim().startsWith('>')) return [Number(numbers[0]), null];
+    return [null, null];
+}
+
+function evaluate(input) {
+    const value = Number(input.value);
+    const flag = input.closest('tr').querySelector('.flag-text');
+    input.classList.remove('result-low', 'result-high', 'result-normal');
+    flag.className = 'flag-text';
+    if (!input.value || Number.isNaN(value)) {
+        flag.textContent = '-';
+        return;
+    }
+    const [low, high] = parseRange(input.dataset.range);
+    if (low !== null && value < low) {
+        input.classList.add('result-low');
+        flag.classList.add('flag-low');
+        flag.textContent = 'پایین';
+    } else if (high !== null && value > high) {
+        input.classList.add('result-high');
+        flag.classList.add('flag-high');
+        flag.textContent = 'بالا';
+    } else if (low !== null || high !== null) {
+        input.classList.add('result-normal');
+        flag.classList.add('flag-normal');
+        flag.textContent = 'طبیعی';
+    } else {
+        flag.textContent = '-';
+    }
+}
+
+document.querySelectorAll('.lab-result-input').forEach(input => {
+    input.addEventListener('input', () => evaluate(input));
+    evaluate(input);
+});
+</script>
+{% endblock %}

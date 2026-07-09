@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -22,6 +23,33 @@ def get_drug_stock(db: Session, drug_id: int) -> int:
         StockTransaction.drug_id == drug_id
     ).scalar()
     return result if result else 0
+
+def prescription_stock_summary(db: Session, prescription: Prescription) -> dict:
+    """Return stock readiness details for a prescription."""
+    warnings = []
+    lines = []
+    for item in prescription.items:
+        current_stock = get_drug_stock(db, item.drug_id)
+        shortage = max(0, item.quantity - current_stock)
+        lines.append({
+            "item": item,
+            "current_stock": current_stock,
+            "shortage": shortage,
+            "is_low_after_dispense": current_stock - item.quantity < item.drug.min_threshold,
+        })
+        if shortage:
+            warnings.append(f"{item.drug.name}: موجودی فعلی {current_stock}، نیاز {item.quantity}")
+    return {"lines": lines, "warnings": warnings, "ready": not warnings and bool(prescription.items)}
+
+def payable_prescription_rows(db: Session, prescriptions: list[Prescription]) -> list[dict]:
+    return [
+        {
+            "prescription": prescription,
+            "item_count": len(prescription.items),
+            "stock": prescription_stock_summary(db, prescription),
+        }
+        for prescription in prescriptions
+    ]
 
 @router.get("/inventory", response_class=HTMLResponse)
 async def inventory(
@@ -226,19 +254,48 @@ async def manual_prescription_form(
 async def create_manual_prescription(
     request: Request,
     patient_id: int = Form(...),
-    total_amount: float = Form(...),
-    drug_id: List[int] = Form(...),
-    quantity: List[int] = Form(...),
+    total_amount: float = Form(0),
+    drug_id: List[str] = Form([]),
+    quantity: List[str] = Form([]),
     instructions: List[str] = Form(...),
     current_user: User = Depends(require_role(['admin', 'pharmacy'])),
     db: Session = Depends(get_db)
 ):
     """Create manual prescription"""
+    prescription_rows = []
+    prescription_total = Decimal("0")
+
+    for index, raw_drug_id in enumerate(drug_id):
+        if not raw_drug_id:
+            continue
+        drug = db.query(Drug).filter(Drug.id == int(raw_drug_id)).first()
+        if not drug:
+            continue
+        item_quantity = quantity[index] if index < len(quantity) else 1
+        item_quantity = max(1, int(item_quantity or 1))
+        item_instructions = instructions[index] if index < len(instructions) else ""
+        item_instructions = (item_instructions or drug.default_instructions or "").strip()
+        prescription_rows.append((drug, item_quantity, item_instructions))
+        prescription_total += Decimal(str(drug.price or 0)) * item_quantity
+
+    if not prescription_rows:
+        patient = db.query(Patient).filter(Patient.id == patient_id).first()
+        return templates.TemplateResponse(
+            "pharmacy/manual_prescription.htm",
+            {
+                "request": request,
+                "current_user": current_user,
+                "active_page": "manual_prescription",
+                "patient": patient,
+                "messages": [{"type": "danger", "text": "حداقل یک داروی معتبر برای ثبت نسخه لازم است."}]
+            }
+        )
+
     prescription = Prescription(
         patient_id=patient_id,
         admission_id=None,
         is_manual=True,
-        total_amount=total_amount,
+        total_amount=prescription_total,
         status=PrescriptionStatus.waiting_payment,
         created_by=current_user.id
     )
@@ -246,16 +303,14 @@ async def create_manual_prescription(
     db.add(prescription)
     db.flush()
     
-    # Create prescription items
-    for i in range(len(drug_id)):
-        if drug_id[i]:
-            item = PrescriptionItem(
-                prescription_id=prescription.id,
-                drug_id=drug_id[i],
-                quantity=quantity[i],
-                instructions=instructions[i]
-            )
-            db.add(item)
+    for drug, item_quantity, item_instructions in prescription_rows:
+        item = PrescriptionItem(
+            prescription_id=prescription.id,
+            drug_id=drug.id,
+            quantity=item_quantity,
+            instructions=item_instructions or "طبق دستور"
+        )
+        db.add(item)
     
     db.commit()
     
@@ -270,7 +325,8 @@ async def dispense_list(
     """List paid prescriptions ready for dispensing"""
     prescriptions = db.query(Prescription).filter(
         Prescription.status == PrescriptionStatus.paid
-    ).all()
+    ).order_by(Prescription.created_at.asc()).all()
+    prescription_rows = payable_prescription_rows(db, prescriptions)
     
     return templates.TemplateResponse(
         "pharmacy/dispense.htm",
@@ -278,7 +334,8 @@ async def dispense_list(
             "request": request,
             "current_user": current_user,
             "active_page": "dispense",
-            "prescriptions": prescriptions
+            "prescriptions": prescriptions,
+            "prescription_rows": prescription_rows
         }
     )
 
@@ -291,16 +348,11 @@ async def dispense_detail(
 ):
     """Prescription detail for dispensing"""
     prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
-    
-    # Check stock availability
-    stock_warnings = []
-    for item in prescription.items:
-        current_stock = get_drug_stock(db, item.drug_id)
-        if current_stock < item.quantity:
-            stock_warnings.append(
-                f"{item.drug.name}: موجودی فعلی {current_stock}، نیاز به {item.quantity}"
-            )
-    
+    if not prescription:
+        return RedirectResponse(url="/pharmacy/dispense", status_code=302)
+
+    stock = prescription_stock_summary(db, prescription)
+
     return templates.TemplateResponse(
         "pharmacy/dispense_detail.htm",
         {
@@ -308,7 +360,9 @@ async def dispense_detail(
             "current_user": current_user,
             "active_page": "dispense",
             "prescription": prescription,
-            "stock_warnings": stock_warnings
+            "stock_warnings": stock["warnings"],
+            "stock_lines": stock["lines"],
+            "can_dispense": prescription.status == PrescriptionStatus.paid and stock["ready"]
         }
     )
 
@@ -344,7 +398,7 @@ async def complete_dispense(
         db.rollback()
         prescriptions = db.query(Prescription).filter(
             Prescription.status == PrescriptionStatus.paid
-        ).all()
+        ).order_by(Prescription.created_at.asc()).all()
         return templates.TemplateResponse(
             "pharmacy/dispense.htm",
             {
@@ -352,6 +406,7 @@ async def complete_dispense(
                 "current_user": current_user,
                 "active_page": "dispense",
                 "prescriptions": prescriptions,
+                "prescription_rows": payable_prescription_rows(db, prescriptions),
                 "messages": [{"type": "danger", "text": "<br>".join(stock_errors)}]
             }
         )
@@ -416,7 +471,11 @@ async def view_prescription(
 ):
     """View prescription detail"""
     prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
-    
+    if not prescription:
+        return RedirectResponse(url="/pharmacy/search", status_code=302)
+
+    stock = prescription_stock_summary(db, prescription)
+
     return templates.TemplateResponse(
         "pharmacy/dispense_detail.htm",
         {
@@ -424,6 +483,8 @@ async def view_prescription(
             "current_user": current_user,
             "active_page": "search_prescriptions",
             "prescription": prescription,
-            "stock_warnings": []
+            "stock_warnings": stock["warnings"],
+            "stock_lines": stock["lines"],
+            "can_dispense": prescription.status == PrescriptionStatus.paid and stock["ready"]
         }
     )

@@ -1,16 +1,32 @@
 from datetime import date
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
-from database import get_db
-from models.drug import Drug
-from models.patient import Patient, Gender
-from models.admission import Admission
-from models.user import User
+
 from auth import require_role
-from utils.validators import validate_iranian_national_id
+from database import get_db
+from models.admission import Admission
+from models.drug import Drug
+from models.lab_test import LabTest
+from models.patient import Gender, Patient
+from models.stock import StockTransaction
+from models.user import User
 
 router = APIRouter(prefix="/api", tags=["api"])
+
+
+def normalize_national_id(value: str) -> str:
+    return "".join(filter(str.isdigit, value or ""))
+
+
+def get_drug_stock(db: Session, drug_id: int) -> int:
+    result = db.query(func.sum(StockTransaction.quantity_change)).filter(
+        StockTransaction.drug_id == drug_id
+    ).scalar()
+    return result if result else 0
+
 
 def patient_payload(patient: Patient, db: Session):
     """Serialize patient demographics plus last visit summary for admission lookup."""
@@ -35,14 +51,12 @@ def patient_payload(patient: Patient, db: Session):
         } if last_admission else None,
     }
 
+
 @router.get("/drugs/search")
-async def search_drugs(
-    q: str,
-    db: Session = Depends(get_db)
-):
-    """API endpoint for drug search autocomplete"""
+async def search_drugs(q: str, db: Session = Depends(get_db)):
+    """API endpoint for drug search autocomplete."""
     drugs = db.query(Drug).filter(Drug.name.contains(q)).limit(10).all()
-    
+
     return JSONResponse([
         {
             "id": drug.id,
@@ -51,31 +65,55 @@ async def search_drugs(
             "form": drug.form,
             "dosage": drug.dosage,
             "default_instructions": drug.default_instructions,
-            "price": float(drug.price)
+            "price": float(drug.price),
+            "stock": get_drug_stock(db, drug.id),
+            "min_threshold": drug.min_threshold,
         }
         for drug in drugs
     ])
 
+
+@router.get("/lab-tests/search")
+async def search_lab_tests(q: str, db: Session = Depends(get_db)):
+    """API endpoint for active laboratory test autocomplete."""
+    query = (q or "").strip()
+    if len(query) < 2:
+        return JSONResponse([])
+
+    tests = db.query(LabTest).filter(
+        LabTest.is_active == True,
+        (LabTest.name.contains(query)) | (LabTest.code.contains(query))
+    ).order_by(LabTest.category.asc(), LabTest.name.asc()).limit(12).all()
+
+    return JSONResponse([
+        {
+            "id": test.id,
+            "code": test.code,
+            "name": test.name,
+            "category": test.category,
+            "sample_type": test.sample_type,
+            "unit": test.unit,
+            "price": float(test.price or 0),
+            "male_normal_range": test.male_normal_range,
+            "female_normal_range": test.female_normal_range,
+        }
+        for test in tests
+    ])
+
+
 @router.get("/patients/lookup")
 async def lookup_patient(
     national_id: str,
-    current_user: User = Depends(require_role(['admin', 'reception', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_role(["admin", "reception", "pharmacy"])),
+    db: Session = Depends(get_db),
 ):
     """Lookup a patient by national ID for non-blocking admission workflows."""
-    normalized_id = ''.join(filter(str.isdigit, national_id or ''))
+    normalized_id = normalize_national_id(national_id)
     if len(normalized_id) != 10:
         return JSONResponse({
             "exists": False,
             "valid": False,
-            "message": "کد ملی باید ۱۰ رقم باشد."
-        }, status_code=400)
-
-    if not validate_iranian_national_id(normalized_id):
-        return JSONResponse({
-            "exists": False,
-            "valid": False,
-            "message": "کد ملی وارد شده معتبر نیست."
+            "message": "کد ملی باید ۱۰ رقم باشد.",
         }, status_code=400)
 
     patient = db.query(Patient).filter(Patient.national_id == normalized_id).first()
@@ -84,27 +122,28 @@ async def lookup_patient(
             "exists": False,
             "valid": True,
             "national_id": normalized_id,
-            "message": "پرونده‌ای برای این کد ملی یافت نشد."
+            "message": "پرونده ای برای این کد ملی یافت نشد.",
         })
 
     return JSONResponse({
         "exists": True,
         "valid": True,
-        "patient": patient_payload(patient, db)
+        "patient": patient_payload(patient, db),
     })
+
 
 @router.post("/patients/quick-create")
 async def quick_create_patient(
     request: Request,
-    current_user: User = Depends(require_role(['admin', 'reception'])),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(require_role(["admin", "reception"])),
+    db: Session = Depends(get_db),
 ):
     """Create a patient inline and return the new profile for the admission form."""
     data = await request.json()
-    national_id = ''.join(filter(str.isdigit, data.get("national_id", "")))
+    national_id = normalize_national_id(data.get("national_id", ""))
 
-    if not validate_iranian_national_id(national_id):
-        return JSONResponse({"ok": False, "message": "کد ملی وارد شده معتبر نیست."}, status_code=400)
+    if len(national_id) != 10:
+        return JSONResponse({"ok": False, "message": "کد ملی باید ۱۰ رقم باشد."}, status_code=400)
 
     if db.query(Patient).filter(Patient.national_id == national_id).first():
         return JSONResponse({"ok": False, "message": "این بیمار قبلا ثبت شده است."}, status_code=409)
@@ -127,7 +166,7 @@ async def quick_create_patient(
         birth_date=birth_date,
         gender=gender,
         address=(data.get("address") or "").strip() or None,
-        created_by=current_user.id
+        created_by=current_user.id,
     )
 
     db.add(patient)
@@ -136,5 +175,5 @@ async def quick_create_patient(
 
     return JSONResponse({
         "ok": True,
-        "patient": patient_payload(patient, db)
+        "patient": patient_payload(patient, db),
     }, status_code=201)

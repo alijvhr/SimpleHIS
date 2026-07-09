@@ -19,7 +19,7 @@
                 <div class="form-group">
                     <label for="national_id_lookup" class="form-label">کد ملی بیمار</label>
                     <input type="text" id="national_id_lookup" class="form-control"
-                           value="{{ patient.national_id if patient else '' }}"
+                           value="{{ patient.national_id if patient else searched_national_id or '' }}"
                            inputmode="numeric" maxlength="10" autocomplete="off"
                            placeholder="مثال: ۰۰۱۲۳۴۵۶۷۸">
                 </div>
@@ -27,6 +27,14 @@
                     <label class="form-label">&nbsp;</label>
                     <div id="lookup_status" class="lookup-status">در انتظار ورود کد ملی</div>
                 </div>
+            </div>
+
+            <div class="action-row mb-3">
+                <button type="button" id="open_quick_patient_modal" class="btn btn-primary">
+                    <i class="fas fa-user-plus"></i>
+                    ثبت بیمار جدید
+                </button>
+                <span class="muted">برای بیمار بدون پرونده، ابتدا کد ملی ۱۰ رقمی را وارد کنید.</span>
             </div>
 
             <div id="patient_summary" class="patient-summary {% if not patient %}hidden{% endif %}">
@@ -57,9 +65,21 @@
                         <select id="admission_type" name="admission_type" class="form-control" required>
                             <option value="">انتخاب کنید</option>
                             <option value="doctor">ویزیت پزشک</option>
+                            <option value="laboratory">Laboratory</option>
                             <option value="radiology">رادیولوژی</option>
                         </select>
                     </div>
+                    <div class="form-group" id="lab_tests_group" style="display: none;">
+                        <label for="lab_test_id" class="form-label">Laboratory tests</label>
+                        <select id="lab_test_id" name="lab_test_id" class="form-control" multiple size="8">
+                            {% for test in lab_tests %}
+                            <option value="{{ test.id }}" data-price="{{ test.price or 0 }}">
+                                {{ test.code }} - {{ test.name }} ({{ "{:,}".format(test.price|int) }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
 
                     <div class="form-group" id="radiology_type_group" style="display: none;">
                         <label for="radiology_type" class="form-label">نوع رادیولوژی</label>
@@ -126,6 +146,10 @@
         <div id="quick_patient_error" class="alert alert-danger hidden"></div>
         <form id="quick_patient_form">
             <input type="hidden" id="quick_national_id" name="national_id">
+            <div class="alert alert-info">
+                <i class="fas fa-id-card"></i>
+                <span>کد ملی: <strong id="quick_national_id_display">-</strong></span>
+            </div>
             <div class="grid grid-2">
                 <div class="form-group">
                     <label for="quick_full_name" class="form-label">نام و نام خانوادگی</label>
@@ -198,6 +222,7 @@ function clearPatient() {
 
 function openQuickModal(nationalId) {
     document.getElementById('quick_national_id').value = nationalId;
+    document.getElementById('quick_national_id_display').textContent = nationalId || '-';
     document.getElementById('quick_patient_error').classList.add('hidden');
     document.getElementById('quick_patient_modal').classList.remove('hidden');
     document.getElementById('quick_full_name').focus();
@@ -209,7 +234,12 @@ function closeQuickModal() {
 
 function updateInvoice() {
     const type = document.getElementById('admission_type').value;
-    document.getElementById('invoice_gross').textContent = toMoney(admissionPrices[type] || 0);
+    let total = Number(admissionPrices[type] || 0);
+    if (type === 'laboratory') {
+        total = Array.from(document.getElementById('lab_test_id').selectedOptions)
+            .reduce((sum, option) => sum + Number(option.dataset.price || 0), 0);
+    }
+    document.getElementById('invoice_gross').textContent = toMoney(total);
 }
 
 document.getElementById('national_id_lookup').addEventListener('input', function() {
@@ -251,13 +281,38 @@ document.getElementById('national_id_lookup').addEventListener('input', function
 document.getElementById('admission_type').addEventListener('change', function() {
     const radiologyGroup = document.getElementById('radiology_type_group');
     const radiologySelect = document.getElementById('radiology_type');
+    const labGroup = document.getElementById('lab_tests_group');
+    const labSelect = document.getElementById('lab_test_id');
     const isRadiology = this.value === 'radiology';
+    const isLaboratory = this.value === 'laboratory';
     radiologyGroup.style.display = isRadiology ? 'block' : 'none';
     radiologySelect.required = isRadiology;
+    labGroup.style.display = isLaboratory ? 'block' : 'none';
+    labSelect.required = isLaboratory;
     if (!isRadiology) {
         radiologySelect.value = '';
     }
+    if (!isLaboratory) {
+        Array.from(labSelect.options).forEach(option => option.selected = false);
+    }
     updateInvoice();
+});
+
+document.getElementById('lab_test_id').addEventListener('change', updateInvoice);
+
+document.getElementById('open_quick_patient_modal').addEventListener('click', function() {
+    const nationalInput = document.getElementById('national_id_lookup');
+    const nationalId = nationalInput.value.replace(/\D/g, '').slice(0, 10);
+    nationalInput.value = nationalId;
+
+    if (nationalId.length !== 10) {
+        setLookupStatus('برای ثبت بیمار جدید، کد ملی ۱۰ رقمی را وارد کنید.', 'warning');
+        nationalInput.focus();
+        return;
+    }
+
+    clearPatient();
+    openQuickModal(nationalId);
 });
 
 document.getElementById('quick_patient_form').addEventListener('submit', function(event) {
@@ -308,6 +363,11 @@ setPatient({
     last_visit: null
 });
 setLookupStatus('پرونده بیمار انتخاب شده است', 'success');
+{% endif %}
+
+{% if patient_not_found %}
+setLookupStatus('برای این کد ملی پرونده ای پیدا نشد. اطلاعات بیمار جدید را ثبت کنید.', 'warning');
+openQuickModal({{ searched_national_id|tojson }});
 {% endif %}
 </script>
 {% endblock %}

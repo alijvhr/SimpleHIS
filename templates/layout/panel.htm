@@ -1,17 +1,15 @@
 {% extends "layout/base.htm" %}
 
 {% block content %}
-<!-- Header -->
-<div class="header">
+<header class="header">
     <a href="/home" class="header-logo">
-        <img src="/static/assets/logo.png" alt="Logo">
-        <span>سیستم اطلاعات بیمارستان</span>
+        <img src="/static/assets/logo.png" alt="نشان سامانه">
+        <span>سامانه اطلاعات بیمارستان</span>
     </a>
-    
+
     <div class="header-right">
-        <!-- User Menu -->
         <div class="user-menu">
-            <button id="userBtn" class="user-btn">
+            <button id="userBtn" class="user-btn" type="button" aria-haspopup="true" aria-expanded="false">
                 <i class="fas fa-user-circle"></i>
                 <span>{{ current_user.full_name }}</span>
                 <i class="fas fa-chevron-down"></i>
@@ -23,61 +21,70 @@
                 </a>
             </div>
         </div>
-        
-        <!-- Dark Mode Toggle -->
-        <button id="themeToggle" class="theme-toggle">
+
+        <button id="themeToggle" class="theme-toggle" type="button" aria-label="تغییر حالت نمایش">
             <i class="fas fa-moon"></i>
         </button>
     </div>
-</div>
+</header>
 
-<!-- Layout -->
 <div class="layout">
-    <!-- Sidebar -->
     <aside class="sidebar">
-        <button id="sidebarToggle" class="sidebar-toggle">
-            <i class="fas fa-bars"></i> منو
+        <button id="sidebarToggle" class="sidebar-toggle" type="button">
+            <i class="fas fa-bars"></i>
+            منو
         </button>
-        
-        <nav>
+
+        <nav aria-label="منوی اصلی">
             <ul>
                 <li>
                     <a href="/home" {% if active_page == 'home' %}class="active"{% endif %}>
                         <i class="fas fa-home"></i>
-                        <span>خانه</span>
+                        <span>داشبورد</span>
                     </a>
                 </li>
-                
+
                 {% if current_user.role in ['admin', 'reception'] %}
+                <li class="nav-section">پذیرش و صندوق</li>
                 <li>
                     <a href="/reception/patients" {% if active_page == 'patients' %}class="active"{% endif %}>
                         <i class="fas fa-users"></i>
-                        <span>بیماران</span>
+                        <span>پرونده بیماران</span>
                     </a>
                 </li>
                 <li>
                     <a href="/reception/admit" {% if active_page == 'admit' %}class="active"{% endif %}>
                         <i class="fas fa-user-plus"></i>
-                        <span>پذیرش</span>
+                        <span>پذیرش جدید</span>
                     </a>
                 </li>
                 <li>
                     <a href="/reception/cashier" {% if active_page == 'cashier' %}class="active"{% endif %}>
                         <i class="fas fa-cash-register"></i>
-                        <span>صندوق</span>
+                        <span>صندوق یکپارچه</span>
                     </a>
                 </li>
                 {% endif %}
-                
+
                 {% if current_user.role in ['admin', 'doctor'] %}
+                <li class="nav-section">درمان</li>
                 <li>
                     <a href="/doctor/patients" {% if active_page == 'doctor_patients' %}class="active"{% endif %}>
                         <i class="fas fa-stethoscope"></i>
-                        <span>بیماران پزشک</span>
+                        <span>صف ویزیت پزشک</span>
                     </a>
                 </li>
                 {% endif %}
-                
+
+                {% if current_user.role in ['admin', 'laboratory'] %}
+                <li>
+                    <a href="/lab/orders" {% if active_page == 'lab' %}class="active"{% endif %}>
+                        <i class="fas fa-vial"></i>
+                        <span>آزمایشگاه</span>
+                    </a>
+                </li>
+                {% endif %}
+
                 {% if current_user.role in ['admin', 'radiologist'] %}
                 <li>
                     <a href="/radiology/admissions" {% if active_page == 'radiology' %}class="active"{% endif %}>
@@ -86,18 +93,19 @@
                     </a>
                 </li>
                 {% endif %}
-                
+
                 {% if current_user.role in ['admin', 'pharmacy'] %}
+                <li class="nav-section">داروخانه</li>
+                <li>
+                    <a href="/pharmacy/dispense" {% if active_page == 'dispense' %}class="active"{% endif %}>
+                        <i class="fas fa-prescription-bottle"></i>
+                        <span>صف تحویل نسخه</span>
+                    </a>
+                </li>
                 <li>
                     <a href="/pharmacy/inventory" {% if active_page == 'inventory' %}class="active"{% endif %}>
                         <i class="fas fa-pills"></i>
                         <span>موجودی داروخانه</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="/pharmacy/dispense" {% if active_page == 'dispense' %}class="active"{% endif %}>
-                        <i class="fas fa-prescription-bottle"></i>
-                        <span>تحویل نسخه</span>
                     </a>
                 </li>
                 <li>
@@ -113,20 +121,20 @@
                     </a>
                 </li>
                 {% endif %}
-                
+
                 {% if current_user.role == 'admin' %}
+                <li class="nav-section">مدیریت</li>
                 <li>
                     <a href="/admin/users" {% if active_page == 'users' %}class="active"{% endif %}>
                         <i class="fas fa-users-cog"></i>
-                        <span>مدیریت کاربران</span>
+                        <span>کاربران و نقش ها</span>
                     </a>
                 </li>
                 {% endif %}
             </ul>
         </nav>
     </aside>
-    
-    <!-- Main Content -->
+
     <main class="main-content">
         {% if messages %}
             {% for message in messages %}
@@ -136,7 +144,7 @@
             </div>
             {% endfor %}
         {% endif %}
-        
+
         {% block main_content %}{% endblock %}
     </main>
 </div>

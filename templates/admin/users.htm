@@ -38,6 +38,8 @@
                         <span class="badge badge-info">پزشک</span>
                         {% elif user.role.value == 'reception' %}
                         <span class="badge badge-primary">پذیرش</span>
+                        {% elif user.role.value == 'laboratory' %}
+                        <span class="badge badge-info">آزمایشگاه</span>
                         {% elif user.role.value == 'radiologist' %}
                         <span class="badge badge-warning">رادیولوژیست</span>
                         {% elif user.role.value == 'pharmacy' %}

@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import uvicorn
 
 from database import init_db
-from routers import common, reception, doctor, radiology, pharmacy, admin, api
+from routers import common, reception, doctor, lab, radiology, pharmacy, admin, api
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,6 +55,7 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.include_router(common.router)
 app.include_router(reception.router)
 app.include_router(doctor.router)
+app.include_router(lab.router)
 app.include_router(radiology.router)
 app.include_router(pharmacy.router)
 app.include_router(admin.router)

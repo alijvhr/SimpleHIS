@@ -3,6 +3,7 @@
 # Admission pricing
 ADMISSION_PRICES = {
     'doctor': 50000,
+    'laboratory': 0,
     'radiology': 200000
 }
 

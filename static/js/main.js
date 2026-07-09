@@ -69,7 +69,7 @@ function addPrescriptionRow() {
     const newRow = document.createElement('tr');
     newRow.innerHTML = `
         <td>${rowCount + 1}</td>
-        <td>
+        <td style="position: relative;">
             <input type="text" class="form-control drug-search" 
                    name="drug_search_${rowCount}" 
                    placeholder="جستجوی دارو..." 
@@ -159,6 +159,7 @@ function showDrugSuggestions(input, drugs) {
         div.setAttribute('data-drug-form', drug.form);
         div.setAttribute('data-drug-dosage', drug.dosage);
         div.setAttribute('data-drug-price', drug.price);
+        div.setAttribute('data-drug-stock', drug.stock || 0);
         div.setAttribute('data-drug-instructions', drug.default_instructions);
         
         // Safely set text content (prevents XSS)
@@ -171,11 +172,13 @@ function showDrugSuggestions(input, drugs) {
         const manuf = document.createTextNode(drug.manufacturer);
         const text2 = document.createTextNode(' - ');
         const formDosage = document.createTextNode(drug.form + ' ' + drug.dosage);
+        const text3 = document.createTextNode(' - موجودی: ' + (drug.stock || 0));
         
         div.appendChild(text1);
         div.appendChild(manuf);
         div.appendChild(text2);
         div.appendChild(formDosage);
+        div.appendChild(text3);
         
         div.onclick = function() { selectDrugSafe(this); };
         
@@ -197,20 +200,26 @@ function selectDrugSafe(element) {
         default_instructions: element.getAttribute('data-drug-instructions')
     };
     
-    const row = element.closest('.prescription-row');
-    const drugNameInput = row.querySelector('.drug-name');
+    const row = element.closest('tr');
+    const drugNameInput = row.querySelector('.drug-search');
     const drugIdInput = row.querySelector('.drug-id');
     const instructionsInput = row.querySelector('.drug-instructions');
-    const priceInput = row.querySelector('.drug-price');
+    const priceCell = row.querySelector('.drug-price');
+    const manufacturerCell = row.querySelector('.drug-manufacturer');
+    const formCell = row.querySelector('.drug-form');
+    const dosageCell = row.querySelector('.drug-dosage');
     
     // Set values safely using textContent/value properties
     drugNameInput.value = drugData.name;
     drugIdInput.value = drugData.id;
     instructionsInput.value = drugData.default_instructions;
-    priceInput.value = drugData.price;
+    priceCell.textContent = drugData.price;
+    if (manufacturerCell) manufacturerCell.textContent = drugData.manufacturer;
+    if (formCell) formCell.textContent = drugData.form;
+    if (dosageCell) dosageCell.textContent = drugData.dosage;
     
     hideSuggestions(drugNameInput);
-    calculateTotal();
+    calculatePrescriptionTotal();
 }
 
 function hideSuggestions(input) {
@@ -249,6 +258,26 @@ function calculatePrescriptionTotal() {
     }
 }
 
+function validatePrescriptionItems(form) {
+    if (!form || !document.getElementById('prescriptionTable')) return true;
+    const rows = form.querySelectorAll('#prescriptionTable tbody tr');
+    let hasDrug = false;
+
+    rows.forEach(row => {
+        const drugId = row.querySelector('.drug-id')?.value;
+        const quantity = parseInt(row.querySelector('.drug-quantity')?.value, 10) || 0;
+        if (drugId && quantity > 0) {
+            hasDrug = true;
+        }
+    });
+
+    if (!hasDrug) {
+        alert('حداقل یک داروی معتبر انتخاب کنید.');
+        return false;
+    }
+    return true;
+}
+
 // Close suggestions when clicking outside
 document.addEventListener('click', function(e) {
     if (!e.target.classList.contains('drug-search')) {
@@ -262,6 +291,14 @@ document.addEventListener('click', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('prescriptionTable')) {
         initPrescriptionForm();
+        const prescriptionForm = document.getElementById('prescriptionForm');
+        if (prescriptionForm) {
+            prescriptionForm.addEventListener('submit', function(event) {
+                if (!validatePrescriptionItems(prescriptionForm)) {
+                    event.preventDefault();
+                }
+            });
+        }
     }
 });
 

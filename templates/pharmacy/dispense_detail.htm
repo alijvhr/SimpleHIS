@@ -4,85 +4,98 @@
 
 {% block main_content %}
 <div class="card">
-    <div class="card-header">
-        <h2 class="card-title">جزئیات نسخه شماره {{ prescription.id }}</h2>
+    <div class="card-header flex-between">
+        <h2 class="card-title">نسخه شماره {{ prescription.id }}</h2>
+        <span class="badge badge-{% if prescription.status.value == 'paid' %}info{% elif prescription.status.value == 'dispensed' %}success{% elif prescription.status.value == 'cancelled' %}danger{% else %}warning{% endif %}">
+            {{ prescription.status.value }}
+        </span>
     </div>
     <div class="card-body">
-        <!-- Patient Info -->
-        <div class="grid grid-3 mb-4">
-            <div><strong>بیمار:</strong> {{ prescription.patient.full_name }}</div>
-            <div><strong>کد ملی:</strong> {{ prescription.patient.national_id }}</div>
-            <div><strong>تلفن:</strong> {{ prescription.patient.phone }}</div>
+        <div class="patient-summary mb-4">
+            <div><span class="summary-label">بیمار</span><strong>{{ prescription.patient.full_name }}</strong></div>
+            <div><span class="summary-label">کد ملی</span><strong>{{ prescription.patient.national_id }}</strong></div>
+            <div><span class="summary-label">تلفن</span><strong>{{ prescription.patient.phone }}</strong></div>
+            <div><span class="summary-label">نوع نسخه</span><strong>{% if prescription.is_manual %}دستی{% else %}پزشک{% endif %}</strong></div>
         </div>
-        
-        <!-- Prescription Items -->
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>ردیف</th>
-                    <th>نام دارو</th>
-                    <th>شرکت</th>
-                    <th>فرم</th>
-                    <th>دوز</th>
-                    <th>تعداد</th>
-                    <th>دستور مصرف</th>
-                    <th>قیمت واحد</th>
-                    <th>جمع</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in prescription.items %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ item.drug.name }}</td>
-                    <td>{{ item.drug.manufacturer }}</td>
-                    <td>{{ item.drug.form }}</td>
-                    <td>{{ item.drug.dosage }}</td>
-                    <td>{{ item.quantity }}</td>
-                    <td>{{ item.instructions }}</td>
-                    <td>{{ "{:,}".format(item.drug.price|int) }}</td>
-                    <td>{{ "{:,}".format((item.quantity * item.drug.price)|int) }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr>
-                    <td colspan="8" class="text-left"><strong>جمع کل:</strong></td>
-                    <td><strong>{{ "{:,}".format(prescription.total_amount|int) }} تومان</strong></td>
-                </tr>
-            </tfoot>
-        </table>
-        
-        <!-- Stock Warnings -->
+
         {% if stock_warnings %}
-        <div class="alert alert-warning mt-3">
+        <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle"></i>
-            <strong>هشدار موجودی:</strong>
-            <ul class="mt-2">
-                {% for warning in stock_warnings %}
-                <li>{{ warning }}</li>
-                {% endfor %}
-            </ul>
+            <span>کسری موجودی: {{ stock_warnings|join(' | ') }}</span>
         </div>
         {% endif %}
-        
-        <!-- Actions -->
+
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ردیف</th>
+                        <th>دارو</th>
+                        <th>فرم / دوز</th>
+                        <th>تعداد</th>
+                        <th>موجودی</th>
+                        <th>راهنمای تحویل</th>
+                        <th>دستور مصرف</th>
+                        <th>جمع</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in stock_lines %}
+                    {% set item = line.item %}
+                    <tr class="{% if line.shortage %}low-stock{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            <strong>{{ item.drug.name }}</strong>
+                            <div class="muted">{{ item.drug.manufacturer }}</div>
+                        </td>
+                        <td>{{ item.drug.form }} {{ item.drug.dosage }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>
+                            <strong>{{ line.current_stock }}</strong>
+                            {% if line.shortage %}
+                            <div class="badge badge-danger">کسری {{ line.shortage }}</div>
+                            {% elif line.is_low_after_dispense %}
+                            <div class="badge badge-warning">زیر حد سفارش</div>
+                            {% else %}
+                            <div class="badge badge-success">کافی</div>
+                            {% endif %}
+                        </td>
+                        <td>قفسه دارو بر اساس نام: {{ item.drug.name }}</td>
+                        <td>{{ item.instructions }}</td>
+                        <td>{{ "{:,}".format((item.quantity * item.drug.price)|int) }} تومان</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="7" class="text-left"><strong>جمع کل:</strong></td>
+                        <td><strong>{{ "{:,}".format(prescription.total_amount|int) }} تومان</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
         <div class="flex-gap mt-4">
-            {% if prescription.status.value == 'paid' and not stock_warnings %}
-            <form method="POST" action="/pharmacy/dispense/{{ prescription.id }}/complete" 
-                  onsubmit="return confirm('آیا از تحویل این نسخه اطمینان دارید؟');">
+            {% if can_dispense %}
+            <form method="POST" action="/pharmacy/dispense/{{ prescription.id }}/complete"
+                  onsubmit="return confirm('از تحویل کامل این نسخه مطمئن هستید؟');">
                 <button type="submit" class="btn btn-success">
                     <i class="fas fa-check"></i>
                     تایید و تحویل
                 </button>
             </form>
+            {% elif prescription.status.value == 'paid' %}
+            <button class="btn btn-secondary" disabled>
+                <i class="fas fa-ban"></i>
+                تحویل تا رفع کسری موجودی غیرفعال است
+            </button>
             {% endif %}
-            
+
             <button onclick="printPrescription({{ prescription.id }})" class="btn btn-secondary">
                 <i class="fas fa-print"></i>
                 چاپ نسخه
             </button>
-            
+
             <a href="/pharmacy/dispense" class="btn btn-secondary">
                 <i class="fas fa-arrow-right"></i>
                 بازگشت

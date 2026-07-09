@@ -3,6 +3,7 @@ from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, date, timezone
 from database import get_db
 from models.user import User
@@ -10,8 +11,11 @@ from models.patient import Patient, Gender
 from models.admission import Admission, AdmissionType, AdmissionStatus
 from models.payment import Payment, PayableType, PaymentStatus
 from models.prescription import Prescription, PrescriptionStatus
+from models.stock import StockTransaction
+from models.lab_order import LabOrder, LabOrderStatus
+from models.lab_order import LabOrderItem
+from models.lab_test import LabTest
 from auth import require_role
-from utils.validators import validate_iranian_national_id
 from config import get_admission_price
 
 router = APIRouter(prefix="/reception", tags=["reception"])
@@ -55,6 +59,41 @@ def cashier_messages(request: Request):
     if request.query_params.get("error") == "invalid_status":
         return [{"type": "danger", "text": "این درخواست دیگر در وضعیت قابل پرداخت نیست."}]
     return []
+
+def get_drug_stock(db: Session, drug_id: int) -> int:
+    result = db.query(func.sum(StockTransaction.quantity_change)).filter(
+        StockTransaction.drug_id == drug_id
+    ).scalar()
+    return result if result else 0
+
+def parse_form_ids(values) -> list[int]:
+    if not values:
+        return []
+    if not isinstance(values, list):
+        values = [values]
+    ids = []
+    for value in values:
+        try:
+            ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+def prescription_payment_rows(db: Session, prescriptions: list[Prescription]) -> list[dict]:
+    rows = []
+    for prescription in prescriptions:
+        shortages = []
+        for item in prescription.items:
+            current_stock = get_drug_stock(db, item.drug_id)
+            if current_stock < item.quantity:
+                shortages.append(f"{item.drug.name}: {current_stock}/{item.quantity}")
+        rows.append({
+            "prescription": prescription,
+            "item_count": len(prescription.items),
+            "stock_ready": not shortages and bool(prescription.items),
+            "shortages": shortages,
+        })
+    return rows
 
 @router.get("/patients", response_class=HTMLResponse)
 async def patients_list(
@@ -115,8 +154,8 @@ async def create_patient(
     """Create new patient"""
     national_id = ''.join(filter(str.isdigit, national_id))
 
-    # Validate national ID format
-    if not validate_iranian_national_id(national_id):
+    # The UI workflow accepts any 10-digit national ID and keeps uniqueness enforced.
+    if len(national_id) != 10:
         return templates.TemplateResponse(
             "reception/patient_form.htm",
             {
@@ -180,11 +219,17 @@ async def admit_form(
 ):
     """Admission form"""
     patient = None
+    searched_national_id = ''.join(filter(str.isdigit, national_id or '')) if national_id else ''
     
     if patient_id:
         patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    elif national_id:
-        patient = db.query(Patient).filter(Patient.national_id == national_id).first()
+    elif searched_national_id:
+        patient = db.query(Patient).filter(Patient.national_id == searched_national_id).first()
+
+    patient_not_found = bool(searched_national_id and len(searched_national_id) == 10 and not patient)
+    lab_tests = db.query(LabTest).filter(
+        LabTest.is_active == True
+    ).order_by(LabTest.category.asc(), LabTest.name.asc()).all()
     
     return templates.TemplateResponse(
         "reception/admit.htm",
@@ -193,11 +238,15 @@ async def admit_form(
             "current_user": current_user,
             "active_page": "admit",
             "patient": patient,
+            "searched_national_id": searched_national_id,
+            "patient_not_found": patient_not_found,
             "insurance_plans": INSURANCE_PLANS,
             "admission_prices": {
                 "doctor": get_admission_price("doctor"),
+                "laboratory": get_admission_price("laboratory"),
                 "radiology": get_admission_price("radiology"),
             },
+            "lab_tests": lab_tests,
             "messages": [{"type": "danger", "text": "بیمار مورد نظر پیدا نشد."}] if request.query_params.get("error") == "not_found" else []
         }
     )
@@ -222,12 +271,44 @@ async def create_admission(
         admission_type=AdmissionType(admission_type),
         description=description,
         radiology_type=radiology_type if admission_type == 'radiology' else None,
-        status=AdmissionStatus.waiting_payment,
+        status=AdmissionStatus.completed if admission_type == 'laboratory' else AdmissionStatus.waiting_payment,
         created_by=current_user.id
     )
     
     try:
+        form = await request.form()
+        lab_test_ids = parse_form_ids(form.getlist("lab_test_id")) if admission_type == "laboratory" else []
+        selected_tests = []
+        if admission_type == "laboratory":
+            selected_tests = db.query(LabTest).filter(
+                LabTest.id.in_(lab_test_ids),
+                LabTest.is_active == True
+            ).all() if lab_test_ids else []
+            if not selected_tests:
+                return RedirectResponse(url=f"/reception/admit?patient_id={patient_id}&error=lab_tests_required", status_code=302)
+
         db.add(admission)
+        db.flush()
+
+        if admission_type == "laboratory":
+            total_amount = sum((test.price or 0) for test in selected_tests)
+            lab_order = LabOrder(
+                patient_id=patient_id,
+                admission_id=admission.id,
+                total_amount=total_amount,
+                status=LabOrderStatus.waiting_payment,
+                clinical_note=description,
+                created_by=current_user.id
+            )
+            db.add(lab_order)
+            db.flush()
+            for test in selected_tests:
+                db.add(LabOrderItem(
+                    order_id=lab_order.id,
+                    test_id=test.id,
+                    price=test.price or 0
+                ))
+
         db.commit()
     except Exception:
         db.rollback()
@@ -249,6 +330,11 @@ async def cashier(
     waiting_prescriptions = db.query(Prescription).filter(
         Prescription.status == PrescriptionStatus.waiting_payment
     ).order_by(Prescription.created_at.asc()).all()
+    prescription_rows = prescription_payment_rows(db, waiting_prescriptions)
+
+    waiting_lab_orders = db.query(LabOrder).filter(
+        LabOrder.status == LabOrderStatus.waiting_payment
+    ).order_by(LabOrder.created_at.asc()).all()
     
     # Add prices to admissions
     for admission in waiting_admissions:
@@ -265,6 +351,8 @@ async def cashier(
             "active_page": "cashier",
             "waiting_admissions": waiting_admissions,
             "waiting_prescriptions": waiting_prescriptions,
+            "prescription_rows": prescription_rows,
+            "waiting_lab_orders": waiting_lab_orders,
             "insurance_plans": INSURANCE_PLANS,
             "messages": messages
         }
@@ -366,4 +454,53 @@ async def cancel_prescription(
         prescription.status = PrescriptionStatus.cancelled
         db.commit()
     
+    return RedirectResponse(url="/reception/cashier?cancelled=1", status_code=302)
+
+@router.post("/cashier/pay-lab-order")
+async def pay_lab_order(
+    request: Request,
+    lab_order_id: int = Form(...),
+    current_user: User = Depends(require_role(['admin', 'reception'])),
+    db: Session = Depends(get_db)
+):
+    """Pay for laboratory order."""
+    lab_order = db.query(LabOrder).filter(LabOrder.id == lab_order_id).first()
+    if not lab_order:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if lab_order.status != LabOrderStatus.waiting_payment:
+        return RedirectResponse(url="/reception/cashier?error=invalid_status", status_code=302)
+
+    lab_order.status = LabOrderStatus.paid
+    lab_order.paid_at = datetime.now(timezone.utc)
+    lab_order.paid_by = current_user.id
+
+    payment = Payment(
+        payable_type=PayableType.lab_order,
+        payable_id=lab_order_id,
+        amount=lab_order.total_amount,
+        receipt_number=receipt_number("LAB", lab_order_id),
+        status=PaymentStatus.paid,
+        created_by=current_user.id
+    )
+
+    db.add(payment)
+    db.commit()
+
+    return RedirectResponse(url="/reception/cashier?paid=1", status_code=302)
+
+@router.post("/cashier/cancel-lab-order")
+async def cancel_lab_order(
+    request: Request,
+    lab_order_id: int = Form(...),
+    current_user: User = Depends(require_role(['admin', 'reception'])),
+    db: Session = Depends(get_db)
+):
+    """Cancel laboratory order."""
+    lab_order = db.query(LabOrder).filter(LabOrder.id == lab_order_id).first()
+    if not lab_order:
+        return RedirectResponse(url="/reception/cashier?error=not_found", status_code=302)
+    if lab_order.status == LabOrderStatus.waiting_payment:
+        lab_order.status = LabOrderStatus.cancelled
+        db.commit()
+
     return RedirectResponse(url="/reception/cashier?cancelled=1", status_code=302)
