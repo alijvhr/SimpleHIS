@@ -139,10 +139,14 @@ function searchDrug(input) {
 }
 
 function showDrugSuggestions(input, drugs) {
-    const suggestionsDiv = input.parentElement.querySelector('.drug-suggestions');
+    const suggestionsDiv = getSuggestionBox(input);
     
     if (drugs.length === 0) {
         hideSuggestions(input);
+        return;
+    }
+
+    if (!suggestionsDiv) {
         return;
     }
     
@@ -208,22 +212,35 @@ function selectDrugSafe(element) {
     const manufacturerCell = row.querySelector('.drug-manufacturer');
     const formCell = row.querySelector('.drug-form');
     const dosageCell = row.querySelector('.drug-dosage');
+    const metaCell = row.querySelector('.drug-meta');
     
     // Set values safely using textContent/value properties
     drugNameInput.value = drugData.name;
     drugIdInput.value = drugData.id;
-    instructionsInput.value = drugData.default_instructions;
-    priceCell.textContent = drugData.price;
+    if (instructionsInput) instructionsInput.value = drugData.default_instructions;
+    if (priceCell) {
+        priceCell.textContent = typeof money === 'function' ? money(drugData.price) : drugData.price;
+        priceCell.dataset.price = drugData.price;
+    }
     if (manufacturerCell) manufacturerCell.textContent = drugData.manufacturer;
     if (formCell) formCell.textContent = drugData.form;
     if (dosageCell) dosageCell.textContent = drugData.dosage;
+    if (metaCell) metaCell.textContent = `${drugData.form || '-'} / ${drugData.dosage || '-'}`;
     
     hideSuggestions(drugNameInput);
-    calculatePrescriptionTotal();
+    if (typeof updateTotals === 'function') {
+        updateTotals();
+    } else {
+        calculatePrescriptionTotal();
+    }
+}
+
+function getSuggestionBox(input) {
+    return input.parentElement.querySelector('.drug-suggestions, .order-suggestions');
 }
 
 function hideSuggestions(input) {
-    const suggestionsDiv = input.parentElement.querySelector('.drug-suggestions');
+    const suggestionsDiv = getSuggestionBox(input);
     if (suggestionsDiv) {
         suggestionsDiv.style.display = 'none';
         suggestionsDiv.innerHTML = '';
