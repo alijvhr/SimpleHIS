@@ -92,6 +92,13 @@ def clean_parallel_rows(*columns):
     for index in range(row_count):
         yield [column[index] if index < len(column) else None for column in columns]
 
+def form_list(form, *names: str) -> list[str]:
+    for name in names:
+        values = form.getlist(name)
+        if values:
+            return values
+    return []
+
 @router.post("/orders/create")
 async def create_clinical_orders(
     request: Request,
@@ -109,6 +116,15 @@ async def create_clinical_orders(
     db: Session = Depends(get_db)
 ):
     """Create medications, laboratory requests, and radiology requests from one visit."""
+    form = await request.form()
+    drug_id = form_list(form, "drug_id", "drug_id[]")
+    quantity = form_list(form, "quantity", "quantity[]")
+    instructions = form_list(form, "instructions", "instructions[]")
+    lab_test_id = form_list(form, "lab_test_id", "lab_test_id[]")
+    lab_note = form_list(form, "lab_note", "lab_note[]")
+    radiology_type = form_list(form, "radiology_type", "radiology_type[]")
+    radiology_description = form_list(form, "radiology_description", "radiology_description[]")
+
     admission = db.query(Admission).filter(
         Admission.id == admission_id,
         Admission.patient_id == patient_id,
