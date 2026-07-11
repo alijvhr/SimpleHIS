@@ -4,8 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from database import get_db
+from database import get_db, one
 import os
 from dotenv import load_dotenv
 
@@ -48,10 +47,7 @@ def decode_token(token: str):
     except JWTError:
         return None
 
-def get_current_user_from_cookie(request: Request, db: Session = Depends(get_db)):
-    """Get current user from session cookie"""
-    from models.user import User
-    
+def get_current_user_from_cookie(request: Request, db=Depends(get_db)):
     token = request.cookies.get("access_token")
     if not token:
         return None
@@ -64,16 +60,9 @@ def get_current_user_from_cookie(request: Request, db: Session = Depends(get_db)
     if user_id is None:
         return None
 
-    try:
-        user_id = int(user_id)
-    except (ValueError, TypeError):
-        return None
+    return one(db, "SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,))
 
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-    return user
-
-def require_auth(request: Request, db: Session = Depends(get_db)):
-    """Require authentication for protected routes"""
+def require_auth(request: Request, db=Depends(get_db)):
     user = get_current_user_from_cookie(request, db)
     if not user:
         raise HTTPException(
@@ -83,7 +72,6 @@ def require_auth(request: Request, db: Session = Depends(get_db)):
     return user
 
 def require_role(allowed_roles: list):
-    """Decorator to require specific roles"""
     def role_checker(user = Depends(require_auth)):
         if user.role not in allowed_roles:
             raise HTTPException(

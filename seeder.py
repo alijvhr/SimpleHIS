@@ -7,20 +7,16 @@ Usage:
 
 from decimal import Decimal
 
-from database import SessionLocal, init_db
-from models.drug import Drug
-from models.lab_test import LabTest
-from models.stock import StockTransaction
-from models.user import User, UserRole
+from database import get_db, init_db, now, one
 
 
 USERS = [
-    ("admin", "System Admin", UserRole.admin),
-    ("reception", "Reception User", UserRole.reception),
-    ("doctor", "Doctor User", UserRole.doctor),
-    ("laboratory", "Laboratory User", UserRole.laboratory),
-    ("radiology", "Radiology User", UserRole.radiologist),
-    ("pharmacy", "Pharmacy User", UserRole.pharmacy),
+    ("admin", "System Admin", "admin"),
+    ("reception", "Reception User", "reception"),
+    ("doctor", "Doctor User", "doctor"),
+    ("laboratory", "Laboratory User", "laboratory"),
+    ("radiology", "Radiology User", "radiologist"),
+    ("pharmacy", "Pharmacy User", "pharmacy"),
 ]
 
 DEFAULT_PASSWORD_HASH = "$2b$12$hIxdXLiBf79n2d2ynD1B1uatgwB/l0w9XwIDwLzjVvPd2.NJpw5YG"
@@ -94,126 +90,107 @@ LAB_TESTS = [
 
 
 def get_seed_user(db):
-    user = db.query(User).filter(User.username == "admin").first()
+    user = one(db, "SELECT * FROM users WHERE username = 'admin'")
     if user:
         return user
 
-    user = User(
-        username="admin",
-        password_hash=ADMIN_PASSWORD_HASH,
-        full_name="System Admin",
-        role=UserRole.admin,
-        is_active=True,
+    cur = db.execute(
+        """
+        INSERT INTO users (username, password_hash, full_name, role, is_active, created_at)
+        VALUES ('admin', ?, 'System Admin', 'admin', 1, ?)
+        """,
+        (ADMIN_PASSWORD_HASH, now()),
     )
-    db.add(user)
-    db.flush()
-    return user
+    return one(db, "SELECT * FROM users WHERE id = ?", (cur.lastrowid,))
 
 
 def seed_users(db, admin_id):
     for username, full_name, role in USERS:
-        user = db.query(User).filter(User.username == username).first()
+        user = one(db, "SELECT * FROM users WHERE username = ?", (username,))
         if user:
-            user.full_name = full_name
-            user.role = role
-            user.is_active = True
+            db.execute(
+                "UPDATE users SET full_name = ?, role = ?, is_active = 1 WHERE id = ?",
+                (full_name, role, user.id),
+            )
             continue
-        db.add(User(
-            username=username,
-            password_hash=DEFAULT_PASSWORD_HASH,
-            full_name=full_name,
-            role=role,
-            is_active=True,
-            created_by=admin_id,
-        ))
+        db.execute(
+            """
+            INSERT INTO users (username, password_hash, full_name, role, is_active, created_at, created_by)
+            VALUES (?, ?, ?, ?, 1, ?, ?)
+            """,
+            (username, DEFAULT_PASSWORD_HASH, full_name, role, now(), admin_id),
+        )
 
 
 def seed_drugs(db, admin_id):
     created = 0
     for name, manufacturer, form, dosage, instructions, price, min_threshold in DRUGS:
-        drug = db.query(Drug).filter(
-            Drug.name == name,
-            Drug.dosage == dosage,
-            Drug.form == form,
-        ).first()
+        drug = one(
+            db,
+            "SELECT * FROM drugs WHERE name = ? AND dosage = ? AND form = ?",
+            (name, dosage, form),
+        )
         if not drug:
-            drug = Drug(
-                name=name,
-                manufacturer=manufacturer,
-                form=form,
-                dosage=dosage,
-                default_instructions=instructions,
-                price=Decimal(price),
-                min_threshold=min_threshold,
-                created_by=admin_id,
+            cur = db.execute(
+                """
+                INSERT INTO drugs (name, manufacturer, form, dosage, default_instructions, price, min_threshold, created_at, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name, manufacturer, form, dosage, instructions, str(Decimal(price)), min_threshold, now(), admin_id),
             )
-            db.add(drug)
-            db.flush()
-            db.add(StockTransaction(
-                drug_id=drug.id,
-                quantity_change=100,
-                reason="Seeder initial stock",
-                created_by=admin_id,
-            ))
+            db.execute(
+                "INSERT INTO stock_transactions (drug_id, quantity_change, reason, created_at, created_by) VALUES (?, 100, 'Seeder initial stock', ?, ?)",
+                (cur.lastrowid, now(), admin_id),
+            )
             created += 1
             continue
 
-        drug.manufacturer = manufacturer
-        drug.default_instructions = instructions
-        drug.price = Decimal(price)
-        drug.min_threshold = min_threshold
+        db.execute(
+            "UPDATE drugs SET manufacturer = ?, default_instructions = ?, price = ?, min_threshold = ? WHERE id = ?",
+            (manufacturer, instructions, str(Decimal(price)), min_threshold, drug.id),
+        )
     return created
 
 
 def seed_lab_tests(db):
     created = 0
     for code, name, category, sample_type, price, male_range, female_range, unit in LAB_TESTS:
-        test = db.query(LabTest).filter(LabTest.code == code).first()
+        test = one(db, "SELECT * FROM lab_tests WHERE code = ?", (code,))
         if not test:
-            db.add(LabTest(
-                code=code,
-                name=name,
-                category=category,
-                sample_type=sample_type,
-                price=Decimal(price),
-                male_normal_range=male_range,
-                female_normal_range=female_range,
-                unit=unit,
-                is_active=True,
-            ))
+            db.execute(
+                """
+                INSERT INTO lab_tests (code, name, category, sample_type, price, male_normal_range, female_normal_range, unit, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                (code, name, category, sample_type, str(Decimal(price)), male_range, female_range, unit),
+            )
             created += 1
             continue
 
-        test.name = name
-        test.category = category
-        test.sample_type = sample_type
-        test.price = Decimal(price)
-        test.male_normal_range = male_range
-        test.female_normal_range = female_range
-        test.unit = unit
-        test.is_active = True
+        db.execute(
+            """
+            UPDATE lab_tests
+            SET name = ?, category = ?, sample_type = ?, price = ?, male_normal_range = ?, female_normal_range = ?, unit = ?, is_active = 1
+            WHERE id = ?
+            """,
+            (name, category, sample_type, str(Decimal(price)), male_range, female_range, unit, test.id),
+        )
     return created
 
 
 def main():
     init_db()
-    db = SessionLocal()
-    try:
-        admin = get_seed_user(db)
-        db.flush()
-        seed_users(db, admin.id)
-        drug_count = seed_drugs(db, admin.id)
-        lab_count = seed_lab_tests(db)
-        db.commit()
-        print("Seeder completed.")
-        print(f"Users available: {len(USERS)} (password: 123456, admin may use admin123 if newly created)")
-        print(f"Drugs in seed set: {len(DRUGS)}; newly created: {drug_count}")
-        print(f"Lab tests in seed set: {len(LAB_TESTS)}; newly created: {lab_count}")
-    except Exception as exc:
-        db.rollback()
-        raise exc
-    finally:
-        db.close()
+    db = next(get_db())
+    admin = get_seed_user(db)
+    seed_users(db, admin.id)
+    drug_count = seed_drugs(db, admin.id)
+    lab_count = seed_lab_tests(db)
+    db.commit()
+    db.close()
+    print("Seeder completed.")
+    print(f"Users available: {len(USERS)} (password: 123456, admin may use admin123 if newly created)")
+    print(f"Drugs in seed set: {len(DRUGS)}; newly created: {drug_count}")
+    print(f"Lab tests in seed set: {len(LAB_TESTS)}; newly created: {lab_count}")
 
 
 if __name__ == "__main__":

@@ -1,101 +1,113 @@
-from datetime import date
+import sqlite3
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import func
-from sqlalchemy.orm import Session
 
 from auth import require_role
-from database import get_db
-from models.admission import Admission
-from models.drug import Drug
-from models.lab_test import LabTest
-from models.patient import Gender, Patient
-from models.stock import StockTransaction
-from models.user import User
 
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-def normalize_national_id(value: str) -> str:
-    return "".join(filter(str.isdigit, value or ""))
+def get_db():
+    db = sqlite3.connect("hospital.db")
+    db.row_factory = sqlite3.Row
+    try:
+        yield db
+    finally:
+        db.close()
 
 
-def get_drug_stock(db: Session, drug_id: int) -> int:
-    result = db.query(func.sum(StockTransaction.quantity_change)).filter(
-        StockTransaction.drug_id == drug_id
-    ).scalar()
-    return result if result else 0
+def get_drug_stock(db, drug_id):
+    row = db.execute(
+        "SELECT SUM(quantity_change) AS stock FROM stock_transactions WHERE drug_id = ?",
+        (drug_id,),
+    ).fetchone()
+    return row["stock"] or 0
 
 
-def patient_payload(patient: Patient, db: Session):
-    """Serialize patient demographics plus last visit summary for admission lookup."""
-    last_admission = db.query(Admission).filter(
-        Admission.patient_id == patient.id
-    ).order_by(Admission.created_at.desc()).first()
+def patient_payload(patient, db):
+    last_admission = db.execute(
+        """
+        SELECT id, admission_type, status, description, created_at
+        FROM admissions
+        WHERE patient_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (patient["id"],),
+    ).fetchone()
 
     return {
-        "id": patient.id,
-        "national_id": patient.national_id,
-        "full_name": patient.full_name,
-        "phone": patient.phone,
-        "birth_date": patient.birth_date.isoformat() if patient.birth_date else None,
-        "gender": patient.gender.value,
-        "address": patient.address,
+        "id": patient["id"],
+        "national_id": patient["national_id"],
+        "full_name": patient["full_name"],
+        "phone": patient["phone"],
+        "birth_date": patient["birth_date"],
+        "gender": patient["gender"],
+        "address": patient["address"],
         "last_visit": {
-            "id": last_admission.id,
-            "type": last_admission.admission_type.value,
-            "status": last_admission.status.value,
-            "description": last_admission.description,
-            "created_at": last_admission.created_at.isoformat() if last_admission.created_at else None,
+            "id": last_admission["id"],
+            "type": last_admission["admission_type"],
+            "status": last_admission["status"],
+            "description": last_admission["description"],
+            "created_at": last_admission["created_at"],
         } if last_admission else None,
     }
 
 
 @router.get("/drugs/search")
-async def search_drugs(q: str, db: Session = Depends(get_db)):
-    """API endpoint for drug search autocomplete."""
-    drugs = db.query(Drug).filter(Drug.name.contains(q)).limit(10).all()
+async def search_drugs(q: str, db=Depends(get_db)):
+    drugs = db.execute(
+        """
+        SELECT id, name, manufacturer, form, dosage, default_instructions, price, min_threshold
+        FROM drugs
+        WHERE name LIKE ?
+        LIMIT 10
+        """,
+        (f"%{q}%",),
+    ).fetchall()
 
     return JSONResponse([
         {
-            "id": drug.id,
-            "name": drug.name,
-            "manufacturer": drug.manufacturer,
-            "form": drug.form,
-            "dosage": drug.dosage,
-            "default_instructions": drug.default_instructions,
-            "price": float(drug.price),
-            "stock": get_drug_stock(db, drug.id),
-            "min_threshold": drug.min_threshold,
+            "id": drug["id"],
+            "name": drug["name"],
+            "manufacturer": drug["manufacturer"],
+            "form": drug["form"],
+            "dosage": drug["dosage"],
+            "default_instructions": drug["default_instructions"],
+            "price": float(drug["price"]),
+            "stock": get_drug_stock(db, drug["id"]),
+            "min_threshold": drug["min_threshold"],
         }
         for drug in drugs
     ])
 
 
 @router.get("/lab-tests/search")
-async def search_lab_tests(q: str, db: Session = Depends(get_db)):
-    """API endpoint for active laboratory test autocomplete."""
-    query = (q or "").strip()
-    if len(query) < 2:
-        return JSONResponse([])
-
-    tests = db.query(LabTest).filter(
-        LabTest.is_active == True,
-        (LabTest.name.contains(query)) | (LabTest.code.contains(query))
-    ).order_by(LabTest.category.asc(), LabTest.name.asc()).limit(12).all()
+async def search_lab_tests(q: str, db=Depends(get_db)):
+    tests = db.execute(
+        """
+        SELECT id, code, name, category, sample_type, unit, price, male_normal_range, female_normal_range
+        FROM lab_tests
+        WHERE is_active = 1 AND (name LIKE ? OR code LIKE ?)
+        ORDER BY category, name
+        LIMIT 12
+        """,
+        (f"%{q}%", f"%{q}%"),
+    ).fetchall()
 
     return JSONResponse([
         {
-            "id": test.id,
-            "code": test.code,
-            "name": test.name,
-            "category": test.category,
-            "sample_type": test.sample_type,
-            "unit": test.unit,
-            "price": float(test.price or 0),
-            "male_normal_range": test.male_normal_range,
-            "female_normal_range": test.female_normal_range,
+            "id": test["id"],
+            "code": test["code"],
+            "name": test["name"],
+            "category": test["category"],
+            "sample_type": test["sample_type"],
+            "unit": test["unit"],
+            "price": float(test["price"] or 0),
+            "male_normal_range": test["male_normal_range"],
+            "female_normal_range": test["female_normal_range"],
         }
         for test in tests
     ])
@@ -104,24 +116,19 @@ async def search_lab_tests(q: str, db: Session = Depends(get_db)):
 @router.get("/patients/lookup")
 async def lookup_patient(
     national_id: str,
-    current_user: User = Depends(require_role(["admin", "reception", "pharmacy"])),
-    db: Session = Depends(get_db),
+    current_user=Depends(require_role(["admin", "reception", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Lookup a patient by national ID for non-blocking admission workflows."""
-    normalized_id = normalize_national_id(national_id)
-    if len(normalized_id) != 10:
-        return JSONResponse({
-            "exists": False,
-            "valid": False,
-            "message": "کد ملی باید ۱۰ رقم باشد.",
-        }, status_code=400)
+    patient = db.execute(
+        "SELECT * FROM patients WHERE national_id = ?",
+        (national_id,),
+    ).fetchone()
 
-    patient = db.query(Patient).filter(Patient.national_id == normalized_id).first()
     if not patient:
         return JSONResponse({
             "exists": False,
             "valid": True,
-            "national_id": normalized_id,
+            "national_id": national_id,
             "message": "پرونده ای برای این کد ملی یافت نشد.",
         })
 
@@ -135,43 +142,34 @@ async def lookup_patient(
 @router.post("/patients/quick-create")
 async def quick_create_patient(
     request: Request,
-    current_user: User = Depends(require_role(["admin", "reception"])),
-    db: Session = Depends(get_db),
+    current_user=Depends(require_role(["admin", "reception"])),
+    db=Depends(get_db),
 ):
-    """Create a patient inline and return the new profile for the admission form."""
     data = await request.json()
-    national_id = normalize_national_id(data.get("national_id", ""))
 
-    if len(national_id) != 10:
-        return JSONResponse({"ok": False, "message": "کد ملی باید ۱۰ رقم باشد."}, status_code=400)
-
-    if db.query(Patient).filter(Patient.national_id == national_id).first():
-        return JSONResponse({"ok": False, "message": "این بیمار قبلا ثبت شده است."}, status_code=409)
-
-    try:
-        birth_date = date.fromisoformat(data.get("birth_date", ""))
-        gender = Gender(data.get("gender"))
-    except (TypeError, ValueError):
-        return JSONResponse({"ok": False, "message": "تاریخ تولد یا جنسیت معتبر نیست."}, status_code=400)
-
-    full_name = (data.get("full_name") or "").strip()
-    phone = (data.get("phone") or "").strip()
-    if not full_name or not phone:
-        return JSONResponse({"ok": False, "message": "نام و تلفن بیمار الزامی است."}, status_code=400)
-
-    patient = Patient(
-        national_id=national_id,
-        full_name=full_name,
-        phone=phone,
-        birth_date=birth_date,
-        gender=gender,
-        address=(data.get("address") or "").strip() or None,
-        created_by=current_user.id,
+    cursor = db.execute(
+        """
+        INSERT INTO patients
+        (national_id, full_name, phone, birth_date, gender, address, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data.get("national_id"),
+            data.get("full_name"),
+            data.get("phone"),
+            data.get("birth_date"),
+            data.get("gender"),
+            data.get("address"),
+            datetime.now(timezone.utc).isoformat(),
+            current_user.id,
+        ),
     )
-
-    db.add(patient)
     db.commit()
-    db.refresh(patient)
+
+    patient = db.execute(
+        "SELECT * FROM patients WHERE id = ?",
+        (cursor.lastrowid,),
+    ).fetchone()
 
     return JSONResponse({
         "ok": True,

@@ -1,48 +1,33 @@
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from database import get_db
-from models.user import User, UserRole
+
 from auth import require_role, get_password_hash
+from database import all_rows, get_db, one, now
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 templates = Jinja2Templates(directory="templates")
 
+
+def users(db):
+    return all_rows(db, "SELECT * FROM users ORDER BY id")
+
+
 @router.get("/users", response_class=HTMLResponse)
-async def users_list(
-    request: Request,
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
-):
-    """List all users"""
-    users = db.query(User).all()
-    
+async def users_list(request: Request, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "admin/users.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "users",
-            "users": users
-        }
+        {"request": request, "current_user": current_user, "active_page": "users", "users": users(db)},
     )
 
+
 @router.get("/users/new", response_class=HTMLResponse)
-async def new_user_form(
-    request: Request,
-    current_user: User = Depends(require_role(['admin'])),
-):
-    """New user form"""
+async def new_user_form(request: Request, current_user=Depends(require_role(["admin"]))):
     return templates.TemplateResponse(
         "admin/user_form.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "users",
-            "user": None
-        }
+        {"request": request, "current_user": current_user, "active_page": "users", "user": None},
     )
+
 
 @router.post("/users/new")
 async def create_user(
@@ -52,70 +37,32 @@ async def create_user(
     password: str = Form(...),
     password_confirm: str = Form(...),
     role: str = Form(...),
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin"])),
+    db=Depends(get_db),
 ):
-    """Create new user"""
-    # Validate password
-    if password != password_confirm:
-        return templates.TemplateResponse(
-            "admin/user_form.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "users",
-                "user": None,
-                "messages": [{"type": "danger", "text": "رمز عبور و تکرار آن مطابقت ندارد"}]
-            }
-        )
-    
-    # Check if username exists
-    existing = db.query(User).filter(User.username == username).first()
-    if existing:
-        return templates.TemplateResponse(
-            "admin/user_form.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "users",
-                "user": None,
-                "messages": [{"type": "danger", "text": "این نام کاربری قبلا استفاده شده است"}]
-            }
-        )
-    
-    user = User(
-        username=username,
-        full_name=full_name,
-        password_hash=get_password_hash(password),
-        role=UserRole(role),
-        is_active=True,
-        created_by=current_user.id
+    db.execute(
+        """
+        INSERT INTO users (username, full_name, password_hash, role, is_active, created_at, created_by)
+        VALUES (?, ?, ?, ?, 1, ?, ?)
+        """,
+        (username, full_name, get_password_hash(password), role, now(), current_user.id),
     )
-    
-    db.add(user)
     db.commit()
-    
     return RedirectResponse(url="/admin/users", status_code=302)
 
+
 @router.get("/users/{user_id}/edit", response_class=HTMLResponse)
-async def edit_user_form(
-    request: Request,
-    user_id: int,
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
-):
-    """Edit user form"""
-    user = db.query(User).filter(User.id == user_id).first()
-    
+async def edit_user_form(request: Request, user_id: int, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "admin/user_form.htm",
         {
             "request": request,
             "current_user": current_user,
             "active_page": "users",
-            "user": user
-        }
+            "user": one(db, "SELECT * FROM users WHERE id = ?", (user_id,)),
+        },
     )
+
 
 @router.post("/users/{user_id}/edit")
 async def update_user(
@@ -124,90 +71,29 @@ async def update_user(
     full_name: str = Form(...),
     role: str = Form(...),
     new_password: str = Form(None),
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin"])),
+    db=Depends(get_db),
 ):
-    """Update user"""
-    user = db.query(User).filter(User.id == user_id).first()
-    if user:
-        user.full_name = full_name
-        user.role = UserRole(role)
-        
-        if new_password:
-            user.password_hash = get_password_hash(new_password)
-        
-        db.commit()
-    
+    if new_password:
+        db.execute(
+            "UPDATE users SET full_name = ?, role = ?, password_hash = ? WHERE id = ?",
+            (full_name, role, get_password_hash(new_password), user_id),
+        )
+    else:
+        db.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?", (full_name, role, user_id))
+    db.commit()
     return RedirectResponse(url="/admin/users", status_code=302)
+
 
 @router.post("/users/{user_id}/deactivate")
-async def deactivate_user(
-    request: Request,
-    user_id: int,
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
-):
-    """Deactivate user"""
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        # User not found - redirect with error
-        users = db.query(User).all()
-        return templates.TemplateResponse(
-            "admin/users.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "users",
-                "users": users,
-                "messages": [{"type": "danger", "text": "کاربر مورد نظر یافت نشد"}]
-            }
-        )
-    
-    if user.id == current_user.id:
-        # Cannot deactivate self
-        users = db.query(User).all()
-        return templates.TemplateResponse(
-            "admin/users.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "users",
-                "users": users,
-                "messages": [{"type": "danger", "text": "نمی‌توانید حساب کاربری خود را غیرفعال کنید"}]
-            }
-        )
-    
-    user.is_active = False
+async def deactivate_user(request: Request, user_id: int, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
+    db.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
     db.commit()
-    
     return RedirectResponse(url="/admin/users", status_code=302)
 
+
 @router.post("/users/{user_id}/activate")
-async def activate_user(
-    request: Request,
-    user_id: int,
-    current_user: User = Depends(require_role(['admin'])),
-    db: Session = Depends(get_db)
-):
-    """Activate user"""
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        # User not found - redirect with error
-        users = db.query(User).all()
-        return templates.TemplateResponse(
-            "admin/users.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "users",
-                "users": users,
-                "messages": [{"type": "danger", "text": "کاربر مورد نظر یافت نشد"}]
-            }
-        )
-    
-    user.is_active = True
+async def activate_user(request: Request, user_id: int, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
+    db.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user_id,))
     db.commit()
-    
     return RedirectResponse(url="/admin/users", status_code=302)

@@ -1,31 +1,23 @@
 from decimal import Decimal
+from typing import List
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from datetime import datetime, timezone
-from typing import List
-from database import get_db
-from models.user import User
-from models.patient import Patient
-from models.drug import Drug
-from models.stock import StockTransaction
-from models.prescription import Prescription, PrescriptionItem, PrescriptionStatus
-from auth import require_auth, require_role
+
+from auth import require_role
+from database import all_rows, get_db, get_drug, get_patient, get_prescription, now, one, stock_for_drug
 
 router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
 templates = Jinja2Templates(directory="templates")
 
-def get_drug_stock(db: Session, drug_id: int) -> int:
-    """Calculate current stock for a drug"""
-    result = db.query(func.sum(StockTransaction.quantity_change)).filter(
-        StockTransaction.drug_id == drug_id
-    ).scalar()
-    return result if result else 0
 
-def prescription_stock_summary(db: Session, prescription: Prescription) -> dict:
-    """Return stock readiness details for a prescription."""
+def get_drug_stock(db, drug_id: int) -> int:
+    return stock_for_drug(db, drug_id)
+
+
+def prescription_stock_summary(db, prescription) -> dict:
     warnings = []
     lines = []
     for item in prescription.items:
@@ -41,59 +33,40 @@ def prescription_stock_summary(db: Session, prescription: Prescription) -> dict:
             warnings.append(f"{item.drug.name}: موجودی فعلی {current_stock}، نیاز {item.quantity}")
     return {"lines": lines, "warnings": warnings, "ready": not warnings and bool(prescription.items)}
 
-def payable_prescription_rows(db: Session, prescriptions: list[Prescription]) -> list[dict]:
+
+def payable_prescription_rows(db, prescriptions) -> list[dict]:
     return [
-        {
-            "prescription": prescription,
-            "item_count": len(prescription.items),
-            "stock": prescription_stock_summary(db, prescription),
-        }
+        {"prescription": prescription, "item_count": len(prescription.items), "stock": prescription_stock_summary(db, prescription)}
         for prescription in prescriptions
     ]
 
+
+def prescriptions_by_status(db, status):
+    rows = all_rows(db, "SELECT id FROM prescriptions WHERE status = ? ORDER BY created_at", (status,))
+    return [get_prescription(db, row.id) for row in rows]
+
+
 @router.get("/inventory", response_class=HTMLResponse)
-async def inventory(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Drug inventory with calculated stock"""
-    drugs = db.query(Drug).all()
-    
-    # Calculate stock for each drug
-    drugs_with_stock = []
-    for drug in drugs:
-        stock = get_drug_stock(db, drug.id)
-        drugs_with_stock.append({
-            'drug': drug,
-            'stock': stock
-        })
-    
+async def inventory(request: Request, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    drugs = all_rows(db, "SELECT * FROM drugs ORDER BY name")
     return templates.TemplateResponse(
         "pharmacy/inventory.htm",
         {
             "request": request,
             "current_user": current_user,
             "active_page": "inventory",
-            "drugs": drugs_with_stock
-        }
+            "drugs": [{"drug": drug, "stock": get_drug_stock(db, drug.id)} for drug in drugs],
+        },
     )
 
+
 @router.get("/drug/new", response_class=HTMLResponse)
-async def new_drug_form(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-):
-    """New drug form"""
+async def new_drug_form(request: Request, current_user=Depends(require_role(["admin", "pharmacy"]))):
     return templates.TemplateResponse(
         "pharmacy/drug_form.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "inventory",
-            "drug": None
-        }
+        {"request": request, "current_user": current_user, "active_page": "inventory", "drug": None},
     )
+
 
 @router.post("/drug/new")
 async def create_drug(
@@ -106,57 +79,32 @@ async def create_drug(
     min_threshold: int = Form(...),
     default_instructions: str = Form(...),
     initial_stock: int = Form(0),
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Create new drug"""
-    drug = Drug(
-        name=name,
-        manufacturer=manufacturer,
-        form=form,
-        dosage=dosage,
-        price=price,
-        min_threshold=min_threshold,
-        default_instructions=default_instructions,
-        created_by=current_user.id
+    cur = db.execute(
+        """
+        INSERT INTO drugs (name, manufacturer, form, dosage, price, min_threshold, default_instructions, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (name, manufacturer, form, dosage, price, min_threshold, default_instructions, now(), current_user.id),
     )
-    
-    db.add(drug)
-    db.flush()
-    
-    # Add initial stock if provided
     if initial_stock > 0:
-        stock_tx = StockTransaction(
-            drug_id=drug.id,
-            quantity_change=initial_stock,
-            reason="موجودی اولیه",
-            created_by=current_user.id
+        db.execute(
+            "INSERT INTO stock_transactions (drug_id, quantity_change, reason, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+            (cur.lastrowid, initial_stock, "موجودی اولیه", now(), current_user.id),
         )
-        db.add(stock_tx)
-    
     db.commit()
-    
     return RedirectResponse(url="/pharmacy/inventory", status_code=302)
 
+
 @router.get("/drug/{drug_id}/edit", response_class=HTMLResponse)
-async def edit_drug_form(
-    request: Request,
-    drug_id: int,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Edit drug form"""
-    drug = db.query(Drug).filter(Drug.id == drug_id).first()
-    
+async def edit_drug_form(request: Request, drug_id: int, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "pharmacy/drug_form.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "inventory",
-            "drug": drug
-        }
+        {"request": request, "current_user": current_user, "active_page": "inventory", "drug": get_drug(db, drug_id)},
     )
+
 
 @router.post("/drug/{drug_id}/edit")
 async def update_drug(
@@ -169,41 +117,27 @@ async def update_drug(
     price: float = Form(...),
     min_threshold: int = Form(...),
     default_instructions: str = Form(...),
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Update drug"""
-    drug = db.query(Drug).filter(Drug.id == drug_id).first()
-    if drug:
-        drug.name = name
-        drug.manufacturer = manufacturer
-        drug.form = form
-        drug.dosage = dosage
-        drug.price = price
-        drug.min_threshold = min_threshold
-        drug.default_instructions = default_instructions
-        db.commit()
-    
+    db.execute(
+        """
+        UPDATE drugs SET name = ?, manufacturer = ?, form = ?, dosage = ?, price = ?, min_threshold = ?, default_instructions = ?
+        WHERE id = ?
+        """,
+        (name, manufacturer, form, dosage, price, min_threshold, default_instructions, drug_id),
+    )
+    db.commit()
     return RedirectResponse(url="/pharmacy/inventory", status_code=302)
 
+
 @router.get("/restock", response_class=HTMLResponse)
-async def restock_form(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Restock form"""
-    drugs = db.query(Drug).all()
-    
+async def restock_form(request: Request, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "pharmacy/restock.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "inventory",
-            "drugs": drugs
-        }
+        {"request": request, "current_user": current_user, "active_page": "inventory", "drugs": all_rows(db, "SELECT * FROM drugs ORDER BY name")},
     )
+
 
 @router.post("/restock")
 async def restock(
@@ -211,44 +145,25 @@ async def restock(
     drug_id: int = Form(...),
     quantity: int = Form(...),
     reason: str = Form(...),
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Restock drug"""
-    stock_tx = StockTransaction(
-        drug_id=drug_id,
-        quantity_change=quantity,
-        reason=reason,
-        created_by=current_user.id
+    db.execute(
+        "INSERT INTO stock_transactions (drug_id, quantity_change, reason, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+        (drug_id, quantity, reason, now(), current_user.id),
     )
-    
-    db.add(stock_tx)
     db.commit()
-    
     return RedirectResponse(url="/pharmacy/inventory", status_code=302)
 
+
 @router.get("/manual-prescription", response_class=HTMLResponse)
-async def manual_prescription_form(
-    request: Request,
-    national_id: str = None,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Manual prescription form"""
-    patient = None
-    
-    if national_id:
-        patient = db.query(Patient).filter(Patient.national_id == national_id).first()
-    
+async def manual_prescription_form(request: Request, national_id: str = None, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    patient = one(db, "SELECT * FROM patients WHERE national_id = ?", (national_id,)) if national_id else None
     return templates.TemplateResponse(
         "pharmacy/manual_prescription.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "manual_prescription",
-            "patient": patient
-        }
+        {"request": request, "current_user": current_user, "active_page": "manual_prescription", "patient": patient},
     )
+
 
 @router.post("/manual-prescription")
 async def create_manual_prescription(
@@ -258,233 +173,113 @@ async def create_manual_prescription(
     drug_id: List[str] = Form([]),
     quantity: List[str] = Form([]),
     instructions: List[str] = Form(...),
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Create manual prescription"""
-    prescription_rows = []
-    prescription_total = Decimal("0")
-
+    rows = []
+    total = Decimal("0")
     for index, raw_drug_id in enumerate(drug_id):
         if not raw_drug_id:
             continue
-        drug = db.query(Drug).filter(Drug.id == int(raw_drug_id)).first()
-        if not drug:
-            continue
-        item_quantity = quantity[index] if index < len(quantity) else 1
-        item_quantity = max(1, int(item_quantity or 1))
+        drug = get_drug(db, int(raw_drug_id))
+        item_quantity = max(1, int(quantity[index] if index < len(quantity) else 1))
         item_instructions = instructions[index] if index < len(instructions) else ""
-        item_instructions = (item_instructions or drug.default_instructions or "").strip()
-        prescription_rows.append((drug, item_quantity, item_instructions))
-        prescription_total += Decimal(str(drug.price or 0)) * item_quantity
+        rows.append((drug, item_quantity, (item_instructions or drug.default_instructions or "").strip()))
+        total += Decimal(str(drug.price or 0)) * item_quantity
 
-    if not prescription_rows:
-        patient = db.query(Patient).filter(Patient.id == patient_id).first()
-        return templates.TemplateResponse(
-            "pharmacy/manual_prescription.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "manual_prescription",
-                "patient": patient,
-                "messages": [{"type": "danger", "text": "حداقل یک داروی معتبر برای ثبت نسخه لازم است."}]
-            }
-        )
-
-    prescription = Prescription(
-        patient_id=patient_id,
-        admission_id=None,
-        is_manual=True,
-        total_amount=prescription_total,
-        status=PrescriptionStatus.waiting_payment,
-        created_by=current_user.id
+    cur = db.execute(
+        """
+        INSERT INTO prescriptions (patient_id, admission_id, is_manual, total_amount, status, created_at, created_by)
+        VALUES (?, NULL, 1, ?, 'waiting_payment', ?, ?)
+        """,
+        (patient_id, str(total), now(), current_user.id),
     )
-    
-    db.add(prescription)
-    db.flush()
-    
-    for drug, item_quantity, item_instructions in prescription_rows:
-        item = PrescriptionItem(
-            prescription_id=prescription.id,
-            drug_id=drug.id,
-            quantity=item_quantity,
-            instructions=item_instructions or "طبق دستور"
+    for drug, item_quantity, item_instructions in rows:
+        db.execute(
+            "INSERT INTO prescription_items (prescription_id, drug_id, quantity, instructions) VALUES (?, ?, ?, ?)",
+            (cur.lastrowid, drug.id, item_quantity, item_instructions or "طبق دستور"),
         )
-        db.add(item)
-    
     db.commit()
-    
     return RedirectResponse(url="/reception/cashier", status_code=302)
 
+
 @router.get("/dispense", response_class=HTMLResponse)
-async def dispense_list(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """List paid prescriptions ready for dispensing"""
-    prescriptions = db.query(Prescription).filter(
-        Prescription.status == PrescriptionStatus.paid
-    ).order_by(Prescription.created_at.asc()).all()
-    prescription_rows = payable_prescription_rows(db, prescriptions)
-    
+async def dispense_list(request: Request, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    prescriptions = prescriptions_by_status(db, "paid")
     return templates.TemplateResponse(
         "pharmacy/dispense.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "dispense",
-            "prescriptions": prescriptions,
-            "prescription_rows": prescription_rows
-        }
+        {"request": request, "current_user": current_user, "active_page": "dispense", "prescriptions": prescriptions, "prescription_rows": payable_prescription_rows(db, prescriptions)},
     )
+
 
 @router.get("/dispense/{prescription_id}", response_class=HTMLResponse)
-async def dispense_detail(
-    request: Request,
-    prescription_id: int,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Prescription detail for dispensing"""
-    prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
+async def dispense_detail(request: Request, prescription_id: int, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    prescription = get_prescription(db, prescription_id)
     if not prescription:
         return RedirectResponse(url="/pharmacy/dispense", status_code=302)
-
     stock = prescription_stock_summary(db, prescription)
-
     return templates.TemplateResponse(
         "pharmacy/dispense_detail.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "dispense",
-            "prescription": prescription,
-            "stock_warnings": stock["warnings"],
-            "stock_lines": stock["lines"],
-            "can_dispense": prescription.status == PrescriptionStatus.paid and stock["ready"]
-        }
+        {"request": request, "current_user": current_user, "active_page": "dispense", "prescription": prescription, "stock_warnings": stock["warnings"], "stock_lines": stock["lines"], "can_dispense": prescription.status == "paid" and stock["ready"]},
     )
 
+
 @router.post("/dispense/{prescription_id}/complete")
-async def complete_dispense(
-    request: Request,
-    prescription_id: int,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """Complete prescription dispensing with stock locking"""
-    # Use database transaction with FOR UPDATE to prevent race conditions
-    prescription = db.query(Prescription).filter(
-        Prescription.id == prescription_id
-    ).with_for_update().first()
-    
-    if not prescription or prescription.status != PrescriptionStatus.paid:
+async def complete_dispense(request: Request, prescription_id: int, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    prescription = get_prescription(db, prescription_id)
+    if not prescription or prescription.status != "paid":
         return RedirectResponse(url="/pharmacy/dispense", status_code=302)
-    
-    # Check stock availability within the transaction
-    stock_errors = []
+
     for item in prescription.items:
-        # Lock the stock transaction rows to prevent concurrent modifications
-        current_stock = db.query(func.sum(StockTransaction.quantity_change)).filter(
-            StockTransaction.drug_id == item.drug_id
-        ).with_for_update().scalar() or 0
-        
-        if current_stock < item.quantity:
-            stock_errors.append(f"{item.drug.name}: موجودی ناکافی")
-    
-    # If insufficient stock, rollback and return error
-    if stock_errors:
-        db.rollback()
-        prescriptions = db.query(Prescription).filter(
-            Prescription.status == PrescriptionStatus.paid
-        ).order_by(Prescription.created_at.asc()).all()
-        return templates.TemplateResponse(
-            "pharmacy/dispense.htm",
-            {
-                "request": request,
-                "current_user": current_user,
-                "active_page": "dispense",
-                "prescriptions": prescriptions,
-                "prescription_rows": payable_prescription_rows(db, prescriptions),
-                "messages": [{"type": "danger", "text": "<br>".join(stock_errors)}]
-            }
+        db.execute(
+            "INSERT INTO stock_transactions (drug_id, quantity_change, reason, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+            (item.drug_id, -item.quantity, f"تحویل نسخه {prescription_id}", now(), current_user.id),
         )
-    
-    # Reduce stock for each item (within the locked transaction)
-    for item in prescription.items:
-        stock_tx = StockTransaction(
-            drug_id=item.drug_id,
-            quantity_change=-item.quantity,
-            reason=f"تحویل نسخه {prescription_id}",
-            created_by=current_user.id
-        )
-        db.add(stock_tx)
-    
-    # Update prescription status
-    prescription.status = PrescriptionStatus.dispensed
-    prescription.dispensed_at = datetime.now(timezone.utc)
-    prescription.dispensed_by = current_user.id
-    
+    db.execute(
+        "UPDATE prescriptions SET status = 'dispensed', dispensed_at = ?, dispensed_by = ? WHERE id = ?",
+        (now(), current_user.id, prescription_id),
+    )
     db.commit()
-    
     return RedirectResponse(url="/pharmacy/dispense", status_code=302)
+
 
 @router.get("/search", response_class=HTMLResponse)
 async def search_prescriptions(
     request: Request,
     prescription_id: int = None,
     national_id: str = None,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "pharmacy"])),
+    db=Depends(get_db),
 ):
-    """Search prescriptions"""
     prescriptions = []
-    
     if prescription_id:
-        prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
-        if prescription:
-            prescriptions = [prescription]
+        prescription = get_prescription(db, prescription_id)
+        prescriptions = [prescription] if prescription else []
     elif national_id:
-        prescriptions = db.query(Prescription).join(Patient).filter(
-            Patient.national_id == national_id
-        ).order_by(Prescription.created_at.desc()).all()
-    
+        rows = all_rows(
+            db,
+            """
+            SELECT p.id FROM prescriptions p
+            JOIN patients pt ON pt.id = p.patient_id
+            WHERE pt.national_id = ?
+            ORDER BY p.created_at DESC
+            """,
+            (national_id,),
+        )
+        prescriptions = [get_prescription(db, row.id) for row in rows]
     return templates.TemplateResponse(
         "pharmacy/search_prescriptions.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "search_prescriptions",
-            "prescriptions": prescriptions,
-            "prescription_id": prescription_id,
-            "national_id": national_id
-        }
+        {"request": request, "current_user": current_user, "active_page": "search_prescriptions", "prescriptions": prescriptions, "prescription_id": prescription_id, "national_id": national_id},
     )
 
+
 @router.get("/prescription/{prescription_id}", response_class=HTMLResponse)
-async def view_prescription(
-    request: Request,
-    prescription_id: int,
-    current_user: User = Depends(require_role(['admin', 'pharmacy'])),
-    db: Session = Depends(get_db)
-):
-    """View prescription detail"""
-    prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
+async def view_prescription(request: Request, prescription_id: int, current_user=Depends(require_role(["admin", "pharmacy"])), db=Depends(get_db)):
+    prescription = get_prescription(db, prescription_id)
     if not prescription:
         return RedirectResponse(url="/pharmacy/search", status_code=302)
-
     stock = prescription_stock_summary(db, prescription)
-
     return templates.TemplateResponse(
         "pharmacy/dispense_detail.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "search_prescriptions",
-            "prescription": prescription,
-            "stock_warnings": stock["warnings"],
-            "stock_lines": stock["lines"],
-            "can_dispense": prescription.status == PrescriptionStatus.paid and stock["ready"]
-        }
+        {"request": request, "current_user": current_user, "active_page": "search_prescriptions", "prescription": prescription, "stock_warnings": stock["warnings"], "stock_lines": stock["lines"], "can_dispense": prescription.status == "paid" and stock["ready"]},
     )

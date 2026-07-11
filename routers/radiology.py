@@ -1,16 +1,13 @@
-from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
 from typing import List
 import os
 import uuid
-from database import get_db
-from models.user import User
-from models.admission import Admission, AdmissionStatus, AdmissionType
-from models.radiology import RadiologyReport, RadiologyImage
+
+from fastapi import APIRouter, Request, Depends, Form, UploadFile, File
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
 from auth import require_role
+from database import all_rows, get_admission, get_db, get_radiology_report, now
 from utils.validators import validate_image_file
 
 router = APIRouter(prefix="/radiology", tags=["radiology"])
@@ -19,55 +16,37 @@ templates = Jinja2Templates(directory="templates")
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+
+def radiology_admission_rows(db):
+    rows = all_rows(
+        db,
+        """
+        SELECT id FROM admissions
+        WHERE admission_type = 'radiology' AND status IN ('paid', 'completed')
+        ORDER BY paid_at, created_at
+        """,
+    )
+    return [get_admission(db, row.id) for row in rows]
+
+
 @router.get("/admissions", response_class=HTMLResponse)
-async def radiology_admissions(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'radiologist'])),
-    db: Session = Depends(get_db)
-):
-    """List radiology admissions"""
-    admissions = db.query(Admission).filter(
-        Admission.admission_type == AdmissionType.radiology,
-        Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
-    ).order_by(Admission.paid_at.asc(), Admission.created_at.asc()).all()
-    
+async def radiology_admissions(request: Request, current_user=Depends(require_role(["admin", "radiologist"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "radiology/admissions.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "radiology",
-            "admissions": admissions
-        }
+        {"request": request, "current_user": current_user, "active_page": "radiology", "admissions": radiology_admission_rows(db)},
     )
 
+
 @router.get("/report/{admission_id}", response_class=HTMLResponse)
-async def report_form(
-    request: Request,
-    admission_id: int,
-    current_user: User = Depends(require_role(['admin', 'radiologist'])),
-    db: Session = Depends(get_db)
-):
-    """Radiology report form"""
-    admission = db.query(Admission).filter(
-        Admission.id == admission_id,
-        Admission.admission_type == AdmissionType.radiology,
-        Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
-    ).first()
+async def report_form(request: Request, admission_id: int, current_user=Depends(require_role(["admin", "radiologist"])), db=Depends(get_db)):
+    admission = get_admission(db, admission_id)
     if not admission:
         return RedirectResponse(url="/radiology/admissions", status_code=302)
-    report = db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first()
-    
     return templates.TemplateResponse(
         "radiology/report_form.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "radiology",
-            "admission": admission,
-            "report": report
-        }
+        {"request": request, "current_user": current_user, "active_page": "radiology", "admission": admission, "report": get_radiology_report(db, admission_id)},
     )
+
 
 @router.post("/report/{admission_id}")
 async def create_report(
@@ -75,43 +54,25 @@ async def create_report(
     admission_id: int,
     report_text: str = Form(...),
     images: List[UploadFile] = File(None),
-    current_user: User = Depends(require_role(['admin', 'radiologist'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "radiologist"])),
+    db=Depends(get_db),
 ):
-    """Create or update radiology report"""
-    admission = db.query(Admission).filter(
-        Admission.id == admission_id,
-        Admission.admission_type == AdmissionType.radiology,
-        Admission.status.in_([AdmissionStatus.paid, AdmissionStatus.completed])
-    ).first()
+    admission = get_admission(db, admission_id)
     if not admission:
         return RedirectResponse(url="/radiology/admissions", status_code=302)
 
-    # Handle image uploads with validation
     upload_errors = []
-    validated_files = []  # Store validated file content to avoid re-reading
-    
+    validated_files = []
     if images and images[0].filename:
         for image_file in images:
             if image_file and image_file.filename:
-                # Read file content once
                 content = await image_file.read()
-                file_size = len(content)
-                
-                # Validate image
-                is_valid, error_msg = validate_image_file(
-                    image_file.filename,
-                    image_file.content_type,
-                    file_size
-                )
-                
+                is_valid, error_msg = validate_image_file(image_file.filename, image_file.content_type, len(content))
                 if not is_valid:
                     upload_errors.append(f"{image_file.filename}: {error_msg}")
                 else:
-                    # Store validated file data
                     validated_files.append((image_file.filename, content))
-                
-    # If there are validation errors, return to form
+
     if upload_errors:
         return templates.TemplateResponse(
             "radiology/report_form.htm",
@@ -120,59 +81,37 @@ async def create_report(
                 "current_user": current_user,
                 "active_page": "radiology",
                 "admission": admission,
-                "report": db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first(),
-                "messages": [{"type": "danger", "text": "<br>".join(upload_errors)}]
-            }
+                "report": get_radiology_report(db, admission_id),
+                "messages": [{"type": "danger", "text": "<br>".join(upload_errors)}],
+            },
         )
-    
-    report = db.query(RadiologyReport).filter(RadiologyReport.admission_id == admission_id).first()
+
+    report = get_radiology_report(db, admission_id)
     if report:
-        report.report_text = report_text
+        db.execute("UPDATE radiology_reports SET report_text = ? WHERE id = ?", (report_text, report.id))
+        report_id = report.id
     else:
-        report = RadiologyReport(
-            admission_id=admission_id,
-            report_text=report_text,
-            created_by=current_user.id
+        cur = db.execute(
+            "INSERT INTO radiology_reports (admission_id, report_text, created_at, created_by) VALUES (?, ?, ?, ?)",
+            (admission_id, report_text, now(), current_user.id),
         )
-        db.add(report)
-    db.flush()
-    
-    # Save validated images (reuse already-read content)
+        report_id = cur.lastrowid
+
     for original_filename, content in validated_files:
-        # Generate unique filename
         ext = os.path.splitext(original_filename)[1].lower()
         filename = f"{uuid.uuid4()}{ext}"
-        filepath = os.path.join(UPLOAD_DIR, filename)
-        
-        # Save file
-        with open(filepath, "wb") as f:
+        with open(os.path.join(UPLOAD_DIR, filename), "wb") as f:
             f.write(content)
-        
-        # Create image record
-        img = RadiologyImage(
-            report_id=report.id,
-            filename=filename
+        db.execute(
+            "INSERT INTO radiology_images (report_id, filename, uploaded_at) VALUES (?, ?, ?)",
+            (report_id, filename, now()),
         )
-        db.add(img)
-    
     db.commit()
-    
     return RedirectResponse(url=f"/radiology/report/{admission_id}", status_code=302)
 
+
 @router.post("/complete/{admission_id}")
-async def complete_admission(
-    admission_id: int,
-    current_user: User = Depends(require_role(['admin', 'radiologist'])),
-    db: Session = Depends(get_db)
-):
-    """Complete radiology admission"""
-    admission = db.query(Admission).filter(
-        Admission.id == admission_id,
-        Admission.admission_type == AdmissionType.radiology
-    ).first()
-    if admission and admission.radiology_report:
-        admission.status = AdmissionStatus.completed
-        admission.completed_at = datetime.now(timezone.utc)
-        db.commit()
-    
+async def complete_admission(admission_id: int, current_user=Depends(require_role(["admin", "radiologist"])), db=Depends(get_db)):
+    db.execute("UPDATE admissions SET status = 'completed', completed_at = ? WHERE id = ?", (now(), admission_id))
+    db.commit()
     return RedirectResponse(url="/radiology/admissions", status_code=302)

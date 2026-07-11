@@ -1,78 +1,83 @@
 from decimal import Decimal
+from typing import List
+
 from fastapi import APIRouter, Request, Depends, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-from typing import List
-from database import get_db
-from models.user import User
-from models.patient import Patient
-from models.admission import Admission, AdmissionStatus, AdmissionType
-from models.prescription import Prescription, PrescriptionItem, PrescriptionStatus
-from models.drug import Drug
-from models.lab_order import LabOrder, LabOrderItem, LabOrderStatus
-from models.lab_test import LabTest
+
 from auth import require_role
+from database import all_rows, get_admission, get_db, get_drug, get_lab_order, get_lab_test, get_patient, get_prescription, now, one
 
 router = APIRouter(prefix="/doctor", tags=["doctor"])
 templates = Jinja2Templates(directory="templates")
 
+
+def clean_parallel_rows(*columns):
+    row_count = max((len(column) for column in columns), default=0)
+    for index in range(row_count):
+        yield [column[index] if index < len(column) else None for column in columns]
+
+
+def form_list(form, *names: str) -> list[str]:
+    for name in names:
+        values = form.getlist(name)
+        if values:
+            return values
+    return []
+
+
+def doctor_admissions(db):
+    admissions = all_rows(
+        db,
+        """
+        SELECT * FROM admissions
+        WHERE admission_type = 'doctor' AND status = 'paid'
+        ORDER BY paid_at, created_at
+        """,
+    )
+    for admission in admissions:
+        admission.patient = get_patient(db, admission.patient_id)
+    return admissions
+
+
 @router.get("/patients", response_class=HTMLResponse)
-async def doctor_patients(
-    request: Request,
-    current_user: User = Depends(require_role(['admin', 'doctor'])),
-    db: Session = Depends(get_db)
-):
-    """List paid doctor admissions"""
-    admissions = db.query(Admission).filter(
-        Admission.admission_type == AdmissionType.doctor,
-        Admission.status == AdmissionStatus.paid
-    ).order_by(Admission.paid_at.asc(), Admission.created_at.asc()).all()
-    
+async def doctor_patients(request: Request, current_user=Depends(require_role(["admin", "doctor"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "doctor/patients.htm",
-        {
-            "request": request,
-            "current_user": current_user,
-            "active_page": "doctor_patients",
-            "admissions": admissions
-        }
+        {"request": request, "current_user": current_user, "active_page": "doctor_patients", "admissions": doctor_admissions(db)},
     )
+
 
 @router.get("/patient/{patient_id}/admission/{admission_id}", response_class=HTMLResponse)
 async def patient_file(
     request: Request,
     patient_id: int,
     admission_id: int,
-    current_user: User = Depends(require_role(['admin', 'doctor'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "doctor"])),
+    db=Depends(get_db),
 ):
-    """Patient file with prescription form"""
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
-    admission = db.query(Admission).filter(
-        Admission.id == admission_id,
-        Admission.patient_id == patient_id,
-        Admission.admission_type == AdmissionType.doctor
-    ).first()
+    patient = get_patient(db, patient_id)
+    admission = one(
+        db,
+        "SELECT * FROM admissions WHERE id = ? AND patient_id = ? AND admission_type = 'doctor'",
+        (admission_id, patient_id),
+    )
     if not patient or not admission:
         return RedirectResponse(url="/doctor/patients", status_code=302)
-    
-    # Get previous prescriptions
-    previous_prescriptions = db.query(Prescription).filter(
-        Prescription.patient_id == patient_id,
-        Prescription.id != admission.prescription.id if admission.prescription else True
-    ).order_by(Prescription.created_at.desc()).limit(5).all()
+    admission.patient = patient
 
-    previous_lab_orders = db.query(LabOrder).filter(
-        LabOrder.patient_id == patient_id
-    ).order_by(LabOrder.created_at.desc()).limit(5).all()
+    prescriptions = all_rows(db, "SELECT * FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC LIMIT 5", (patient_id,))
+    previous_prescriptions = [get_prescription(db, row.id) for row in prescriptions]
 
-    previous_radiology = db.query(Admission).filter(
-        Admission.patient_id == patient_id,
-        Admission.admission_type == AdmissionType.radiology
-    ).order_by(Admission.created_at.desc()).limit(5).all()
-    
+    orders = all_rows(db, "SELECT * FROM lab_orders WHERE patient_id = ? ORDER BY created_at DESC LIMIT 5", (patient_id,))
+    previous_lab_orders = [get_lab_order(db, row.id) for row in orders]
+
+    previous_radiology = all_rows(
+        db,
+        "SELECT * FROM admissions WHERE patient_id = ? AND admission_type = 'radiology' ORDER BY created_at DESC LIMIT 5",
+        (patient_id,),
+    )
+
     return templates.TemplateResponse(
         "doctor/patient_file.htm",
         {
@@ -83,21 +88,10 @@ async def patient_file(
             "admission": admission,
             "previous_prescriptions": previous_prescriptions,
             "previous_lab_orders": previous_lab_orders,
-            "previous_radiology": previous_radiology
-        }
+            "previous_radiology": previous_radiology,
+        },
     )
 
-def clean_parallel_rows(*columns):
-    row_count = max((len(column) for column in columns), default=0)
-    for index in range(row_count):
-        yield [column[index] if index < len(column) else None for column in columns]
-
-def form_list(form, *names: str) -> list[str]:
-    for name in names:
-        values = form.getlist(name)
-        if values:
-            return values
-    return []
 
 @router.post("/orders/create")
 async def create_clinical_orders(
@@ -112,10 +106,9 @@ async def create_clinical_orders(
     lab_clinical_note: str = Form(None),
     radiology_type: List[str] = Form([]),
     radiology_description: List[str] = Form([]),
-    current_user: User = Depends(require_role(['admin', 'doctor'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "doctor"])),
+    db=Depends(get_db),
 ):
-    """Create medications, laboratory requests, and radiology requests from one visit."""
     form = await request.form()
     drug_id = form_list(form, "drug_id", "drug_id[]")
     quantity = form_list(form, "quantity", "quantity[]")
@@ -125,98 +118,70 @@ async def create_clinical_orders(
     radiology_type = form_list(form, "radiology_type", "radiology_type[]")
     radiology_description = form_list(form, "radiology_description", "radiology_description[]")
 
-    admission = db.query(Admission).filter(
-        Admission.id == admission_id,
-        Admission.patient_id == patient_id,
-        Admission.admission_type == AdmissionType.doctor,
-        Admission.status == AdmissionStatus.paid
-    ).first()
-    if not admission:
-        return RedirectResponse(url="/doctor/patients", status_code=302)
-
     prescription_rows = []
     prescription_total = Decimal("0")
     for raw_drug_id, raw_quantity, raw_instructions in clean_parallel_rows(drug_id, quantity, instructions):
         if not raw_drug_id:
             continue
-        drug = db.query(Drug).filter(Drug.id == int(raw_drug_id)).first()
-        if not drug:
-            continue
+        drug = get_drug(db, int(raw_drug_id))
         item_quantity = max(1, int(raw_quantity or 1))
         prescription_total += Decimal(str(drug.price or 0)) * item_quantity
         prescription_rows.append((drug, item_quantity, (raw_instructions or drug.default_instructions or "").strip()))
 
     if prescription_rows:
-        prescription = Prescription(
-            patient_id=patient_id,
-            admission_id=admission_id,
-            is_manual=False,
-            total_amount=prescription_total,
-            status=PrescriptionStatus.waiting_payment,
-            created_by=current_user.id
+        cur = db.execute(
+            """
+            INSERT INTO prescriptions (patient_id, admission_id, is_manual, total_amount, status, created_at, created_by)
+            VALUES (?, ?, 0, ?, 'waiting_payment', ?, ?)
+            """,
+            (patient_id, admission_id, str(prescription_total), now(), current_user.id),
         )
-        db.add(prescription)
-        db.flush()
-
+        prescription_id = cur.lastrowid
         for drug, item_quantity, item_instructions in prescription_rows:
-            db.add(PrescriptionItem(
-                prescription_id=prescription.id,
-                drug_id=drug.id,
-                quantity=item_quantity,
-                instructions=item_instructions or "طبق دستور پزشک"
-            ))
+            db.execute(
+                "INSERT INTO prescription_items (prescription_id, drug_id, quantity, instructions) VALUES (?, ?, ?, ?)",
+                (prescription_id, drug.id, item_quantity, item_instructions or "طبق دستور پزشک"),
+            )
 
     lab_rows = []
     lab_total = Decimal("0")
     for raw_test_id, raw_note in clean_parallel_rows(lab_test_id, lab_note):
         if not raw_test_id:
             continue
-        test = db.query(LabTest).filter(LabTest.id == int(raw_test_id), LabTest.is_active == True).first()
-        if not test:
-            continue
+        test = get_lab_test(db, int(raw_test_id))
         lab_total += Decimal(str(test.price or 0))
         lab_rows.append((test, (raw_note or "").strip()))
 
     if lab_rows:
-        lab_order = LabOrder(
-            patient_id=patient_id,
-            admission_id=admission_id,
-            total_amount=lab_total,
-            status=LabOrderStatus.waiting_payment,
-            clinical_note=(lab_clinical_note or "").strip() or None,
-            created_by=current_user.id
+        cur = db.execute(
+            """
+            INSERT INTO lab_orders (patient_id, admission_id, total_amount, status, clinical_note, created_at, created_by)
+            VALUES (?, ?, ?, 'waiting_payment', ?, ?, ?)
+            """,
+            (patient_id, admission_id, str(lab_total), (lab_clinical_note or "").strip() or None, now(), current_user.id),
         )
-        db.add(lab_order)
-        db.flush()
-
+        order_id = cur.lastrowid
         for test, note in lab_rows:
-            db.add(LabOrderItem(
-                order_id=lab_order.id,
-                test_id=test.id,
-                price=test.price or 0,
-                notes=note or None
-            ))
+            db.execute(
+                "INSERT INTO lab_order_items (order_id, test_id, price, notes) VALUES (?, ?, ?, ?)",
+                (order_id, test.id, test.price or 0, note or None),
+            )
 
     for raw_type, raw_description in clean_parallel_rows(radiology_type, radiology_description):
         request_type = (raw_type or "").strip()
         description = (raw_description or "").strip()
-        if not request_type:
-            continue
-        db.add(Admission(
-            patient_id=patient_id,
-            admission_type=AdmissionType.radiology,
-            description=description or f"درخواست تصویربرداری {request_type}",
-            radiology_type=request_type,
-            status=AdmissionStatus.waiting_payment,
-            created_by=current_user.id
-        ))
+        if request_type:
+            db.execute(
+                """
+                INSERT INTO admissions (patient_id, admission_type, description, radiology_type, status, created_at, created_by)
+                VALUES (?, 'radiology', ?, ?, 'waiting_payment', ?, ?)
+                """,
+                (patient_id, description or f"درخواست تصویربرداری {request_type}", request_type, now(), current_user.id),
+            )
 
     db.commit()
+    return RedirectResponse(url=f"/doctor/patient/{patient_id}/admission/{admission_id}?saved=1", status_code=302)
 
-    return RedirectResponse(
-        url=f"/doctor/patient/{patient_id}/admission/{admission_id}?saved=1",
-        status_code=302
-    )
 
 @router.post("/prescription/create")
 async def create_prescription(
@@ -227,37 +192,14 @@ async def create_prescription(
     drug_id: List[str] = Form([]),
     quantity: List[str] = Form([]),
     instructions: List[str] = Form([]),
-    current_user: User = Depends(require_role(['admin', 'doctor'])),
-    db: Session = Depends(get_db)
+    current_user=Depends(require_role(["admin", "doctor"])),
+    db=Depends(get_db),
 ):
-    """Backward-compatible prescription endpoint."""
-    return await create_clinical_orders(
-        request=request,
-        patient_id=patient_id,
-        admission_id=admission_id,
-        drug_id=drug_id,
-        quantity=quantity,
-        instructions=instructions,
-        lab_test_id=[],
-        lab_note=[],
-        lab_clinical_note=None,
-        radiology_type=[],
-        radiology_description=[],
-        current_user=current_user,
-        db=db
-    )
+    return await create_clinical_orders(request, patient_id, admission_id, drug_id, quantity, instructions, [], [], None, [], [], current_user, db)
+
 
 @router.post("/complete/{admission_id}")
-async def complete_visit(
-    admission_id: int,
-    current_user: User = Depends(require_role(['admin', 'doctor'])),
-    db: Session = Depends(get_db)
-):
-    """Complete visit"""
-    admission = db.query(Admission).filter(Admission.id == admission_id).first()
-    if admission:
-        admission.status = AdmissionStatus.completed
-        admission.completed_at = datetime.now(timezone.utc)
-        db.commit()
-    
+async def complete_visit(admission_id: int, current_user=Depends(require_role(["admin", "doctor"])), db=Depends(get_db)):
+    db.execute("UPDATE admissions SET status = 'completed', completed_at = ? WHERE id = ?", (now(), admission_id))
+    db.commit()
     return RedirectResponse(url="/doctor/patients", status_code=302)
