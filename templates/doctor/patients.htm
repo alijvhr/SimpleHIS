@@ -29,7 +29,7 @@
                         <td><strong>{{ admission.patient.full_name }}</strong></td>
                         <td>{{ admission.patient.national_id }}</td>
                         <td>{{ admission.description|truncate(80) }}</td>
-                        <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ admission.paid_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>
                             <a href="/doctor/patient/{{ admission.patient_id }}/admission/{{ admission.id }}" class="btn btn-primary btn-sm">
                                 <i class="fas fa-folder-open"></i>

@@ -193,7 +193,7 @@
             {% for presc in previous_prescriptions %}
             <div class="mb-2">
                 <strong>#{{ presc.id }}</strong>
-                <span class="muted">{{ presc.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="muted">{{ presc.created_at[:10]|replace('-', '/') }}</span>
                 <span class="badge badge-info">{{ presc.status.value }}</span>
             </div>
             {% endfor %}
@@ -209,7 +209,7 @@
             {% for order in previous_lab_orders %}
             <div class="mb-2">
                 <strong>#{{ order.id }}</strong>
-                <span class="muted">{{ order.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="muted">{{ order.created_at[:10]|replace('-', '/') }}</span>
                 <span class="badge badge-info">{{ order.status.value }}</span>
             </div>
             {% endfor %}
@@ -225,7 +225,7 @@
             {% for item in previous_radiology %}
             <div class="mb-2">
                 <strong>{{ item.radiology_type or 'تصویربرداری' }}</strong>
-                <span class="muted">{{ item.created_at.strftime('%Y/%m/%d') }}</span>
+                <span class="muted">{{ item.created_at[:10]|replace('-', '/') }}</span>
                 <span class="badge badge-info">{{ item.status.value }}</span>
             </div>
             {% endfor %}

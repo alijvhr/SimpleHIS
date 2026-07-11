@@ -71,8 +71,8 @@
                         </td>
                         <td>{{ admission.description|truncate(60) }}</td>
                         <td>
-                            <strong class="wait-time" data-created-at="{{ admission.created_at.isoformat() }}">در حال محاسبه</strong>
-                            <div class="muted">{{ admission.created_at.strftime('%Y/%m/%d %H:%M') }}</div>
+                            <strong class="wait-time" data-created-at="{{ admission.created_at|replace(' ', 'T') }}">در حال محاسبه</strong>
+                            <div class="muted">{{ admission.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</div>
                         </td>
                         <td>
                             <select class="form-control insurance-select" form="pay-admission-{{ admission.id }}"
@@ -155,7 +155,7 @@
                             {% endif %}
                         </td>
                         <td><strong>{{ "{:,}".format(prescription.total_amount|int) }}</strong> تومان</td>
-                        <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ prescription.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>
                             <div class="action-row">
                                 <form method="POST" action="/reception/cashier/pay-prescription">
@@ -211,7 +211,7 @@
                             {% endif %}
                         </td>
                         <td><strong>{{ "{:,}".format(lab_order.total_amount|int) }}</strong> تومان</td>
-                        <td>{{ lab_order.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ lab_order.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>
                             <div class="action-row">
                                 <form method="POST" action="/reception/cashier/pay-lab-order">

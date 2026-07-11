@@ -50,7 +50,7 @@
                 </div>
                 {% endif %}
 
-                <small class="text-secondary">ثبت شده در: {{ report.created_at.strftime('%Y/%m/%d %H:%M') }}</small>
+                <small class="text-secondary">ثبت شده در: {{ report.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</small>
             </div>
         </div>
         {% endif %}

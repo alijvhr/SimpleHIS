@@ -32,11 +32,11 @@
             <div>
                 <div class="info-row">
                     <span class="info-label">تاریخ:</span>
-                    <span>{{ prescription.created_at.strftime('%Y/%m/%d') }}</span>
+                    <span>{{ prescription.created_at[:10]|replace('-', '/') }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">ساعت:</span>
-                    <span>{{ prescription.created_at.strftime('%H:%M') }}</span>
+                    <span>{{ prescription.created_at[11:16] }}</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">نوع نسخه:</span>
@@ -85,9 +85,9 @@
         
         <!-- Footer -->
         <div class="invoice-footer">
-            <p>این نسخه در تاریخ {{ prescription.created_at.strftime('%Y/%m/%d') }} صادر شده است.</p>
+            <p>این نسخه در تاریخ {{ prescription.created_at[:10]|replace('-', '/') }} صادر شده است.</p>
             {% if prescription.dispensed_at %}
-            <p>تاریخ تحویل: {{ prescription.dispensed_at.strftime('%Y/%m/%d %H:%M') }}</p>
+            <p>تاریخ تحویل: {{ prescription.dispensed_at[:16]|replace('-', '/')|replace('T', ' ') }}</p>
             {% endif %}
         </div>
     </div>

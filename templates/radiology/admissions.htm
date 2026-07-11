@@ -32,7 +32,7 @@
                         <td>{{ admission.patient.national_id }}</td>
                         <td><span class="badge badge-info">{{ admission.radiology_type }}</span></td>
                         <td>{{ admission.description|truncate(70) }}</td>
-                        <td>{{ admission.paid_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ admission.paid_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>
                             {% if admission.radiology_report %}
                             <span class="badge badge-success">گزارش ثبت شده</span>

@@ -10,11 +10,35 @@ class ValueStr(str):
         return str(self)
 
 
+class DateTimeStr(str):
+    def _datetime(self):
+        value = str(self)
+        try:
+            if value.endswith("Z"):
+                value = value[:-1] + "+00:00"
+            return datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+
+    def strftime(self, date_format):
+        parsed = self._datetime()
+        return parsed.strftime(date_format) if parsed else str(self)
+
+    def isoformat(self):
+        parsed = self._datetime()
+        return parsed.isoformat() if parsed else str(self)
+
+
 class Obj:
     def __init__(self, **items):
         for key, value in items.items():
             if key in ("role", "gender", "status", "admission_type", "payable_type"):
                 value = ValueStr(value) if value is not None else None
+            elif key.endswith("_at"):
+                value = DateTimeStr(value) if value is not None else None
             setattr(self, key, value)
 
     def __getitem__(self, key):

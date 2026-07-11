@@ -16,7 +16,7 @@
             <div><strong>بیمار:</strong> {{ order.patient.full_name }}</div>
             <div><strong>کد ملی:</strong> {{ order.patient.national_id }}</div>
             <div><strong>جنسیت:</strong> {{ order.patient.gender.value }}</div>
-            <div><strong>تاریخ:</strong> {{ order.created_at.strftime('%Y/%m/%d') }}</div>
+            <div><strong>تاریخ:</strong> {{ order.created_at[:10]|replace('-', '/') }}</div>
         </div>
         {% if order.clinical_note %}
         <div class="alert alert-info"><strong>یادداشت بالینی:</strong> {{ order.clinical_note }}</div>

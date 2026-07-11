@@ -49,7 +49,7 @@
                             <div class="muted">{{ row.stock.warnings|join(' | ') }}</div>
                             {% endif %}
                         </td>
-                        <td>{{ prescription.created_at.strftime('%Y/%m/%d %H:%M') }}</td>
+                        <td>{{ prescription.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
                         <td>
                             <div class="action-row">
