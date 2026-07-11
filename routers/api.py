@@ -9,7 +9,7 @@ from auth import require_role
 router = APIRouter(prefix="/api", tags=["api"])
 
 
-def get_db():
+async def get_db():
     db = sqlite3.connect("hospital.db")
     db.row_factory = sqlite3.Row
     try:

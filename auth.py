@@ -1,12 +1,13 @@
-from passlib.context import CryptContext
-from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from database import get_db, one
-import os
+
 from dotenv import load_dotenv
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+
+from database import get_db, one
 
 # Load environment variables from .env file
 load_dotenv()
@@ -62,7 +63,7 @@ def get_current_user_from_cookie(request: Request, db=Depends(get_db)):
 
     return one(db, "SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,))
 
-def require_auth(request: Request, db=Depends(get_db)):
+async def require_auth(request: Request, db=Depends(get_db)):
     user = get_current_user_from_cookie(request, db)
     if not user:
         raise HTTPException(
@@ -72,7 +73,7 @@ def require_auth(request: Request, db=Depends(get_db)):
     return user
 
 def require_role(allowed_roles: list):
-    def role_checker(user = Depends(require_auth)):
+    async def role_checker(user = Depends(require_auth)):
         if user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

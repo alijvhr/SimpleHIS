@@ -25,7 +25,7 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_db():
+async def get_db():
     db = sqlite3.connect(DATABASE_NAME)
     db.row_factory = sqlite3.Row
     try:
