@@ -53,7 +53,7 @@
                         <span class="badge badge-secondary">غیرفعال</span>
                         {% endif %}
                     </td>
-                    <td>{{ user.created_at.strftime('%Y/%m/%d') }}</td>
+                    <td>{{ user.created_at[:10] }}</td>
                     <td>
                         <a href="/admin/users/{{ user.id }}/edit" class="btn btn-primary btn-sm">
                             <i class="fas fa-edit"></i>
@@ -76,6 +76,14 @@
                             </button>
                         </form>
                         {% endif %}
+                        <form method="POST" action="/admin/users/{{ user.id }}/delete"
+                              style="display: inline;"
+                              onsubmit="return confirm('آیا از حذف این کاربر اطمینان دارید؟');">
+                            <button type="submit" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i>
+                                حذف
+                            </button>
+                        </form>
                     </td>
                 </tr>
                 {% endfor %}

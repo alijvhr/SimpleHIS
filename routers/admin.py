@@ -35,7 +35,6 @@ async def create_user(
     username: str = Form(...),
     full_name: str = Form(...),
     password: str = Form(...),
-    password_confirm: str = Form(...),
     role: str = Form(...),
     current_user=Depends(require_role(["admin"])),
     db=Depends(get_db),
@@ -68,6 +67,7 @@ async def edit_user_form(request: Request, user_id: int, current_user=Depends(re
 async def update_user(
     request: Request,
     user_id: int,
+    username: str = Form(...),
     full_name: str = Form(...),
     role: str = Form(...),
     new_password: str = Form(None),
@@ -76,11 +76,11 @@ async def update_user(
 ):
     if new_password:
         db.execute(
-            "UPDATE users SET full_name = ?, role = ?, password_hash = ? WHERE id = ?",
-            (full_name, role, get_password_hash(new_password), user_id),
+            "UPDATE users SET username = ?, full_name = ?, role = ?, password_hash = ? WHERE id = ?",
+            (username, full_name, role, get_password_hash(new_password), user_id),
         )
     else:
-        db.execute("UPDATE users SET full_name = ?, role = ? WHERE id = ?", (full_name, role, user_id))
+        db.execute("UPDATE users SET username = ?, full_name = ?, role = ? WHERE id = ?", (username, full_name, role, user_id))
     db.commit()
     return RedirectResponse(url="/admin/users", status_code=302)
 
@@ -95,5 +95,12 @@ async def deactivate_user(request: Request, user_id: int, current_user=Depends(r
 @router.post("/users/{user_id}/activate")
 async def activate_user(request: Request, user_id: int, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
     db.execute("UPDATE users SET is_active = 1 WHERE id = ?", (user_id,))
+    db.commit()
+    return RedirectResponse(url="/admin/users", status_code=302)
+
+
+@router.post("/users/{user_id}/delete")
+async def delete_user(request: Request, user_id: int, current_user=Depends(require_role(["admin"])), db=Depends(get_db)):
+    db.execute("DELETE FROM users WHERE id = ?", (user_id,))
     db.commit()
     return RedirectResponse(url="/admin/users", status_code=302)
