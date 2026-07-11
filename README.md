@@ -1,288 +1,256 @@
 # Simple Hospital Information System (HIS)
 
-A modern, lightweight, Persian (Farsi) web-based Hospital Information System built with FastAPI and SQLite.
+A lightweight web-based Hospital Information System built with FastAPI, SQLite, Jinja2 templates, and a Persian RTL user interface. The current implementation covers reception, cashier, doctor, laboratory, radiology, pharmacy, administration, print views, async lookup APIs, and seed data for local testing.
 
-> **🔒 Security Update (Feb 16, 2026)**: All dependencies updated to patched versions to fix critical vulnerabilities. See [SECURITY_UPDATE.md](SECURITY_UPDATE.md) for details.
+## Current Status
 
-## Features
+- Version: 3.0
+- Date: July 11, 2026
+- Database: local SQLite file, `hospital.db`
+- Data access style: direct `sqlite3` helpers in `database.py`
+- UI: server-rendered Jinja2 templates with custom CSS and minimal JavaScript
+- Authentication: JWT cookie login with role checks
 
-- **Persian RTL Interface**: Full right-to-left layout with Persian text
-- **Dark/Light Mode**: Toggle between light and dark themes
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Role-Based Access Control**: Admin, Reception, Doctor, Radiologist, Pharmacy
-- **Patient Management**: Search, register, and track patients
-- **Admission System**: Accept patients for doctor visits or radiology with descriptions
-- **Doctor Module**: View patients, write multi-drug prescriptions, complete visits
-- **Radiology Module**: Write reports and upload images
-- **Pharmacy Module**: 
-  - Drug inventory management with low-stock alerts
-  - Manual and doctor prescriptions
-  - Prescription dispensing with stock tracking
-  - Search old prescriptions
-- **Payment System**: Track payments for admissions and prescriptions
-- **Prescription Printing**: Print-friendly prescription invoices
+## Implemented Features
+
+### Authentication and Roles
+
+- Login/logout flow with JWT access token stored in a browser cookie.
+- Password hashing through Passlib.
+- Role-based route protection.
+- Active/inactive user accounts.
+- Admin user management.
+
+Implemented roles:
+
+| Role | Purpose |
+| --- | --- |
+| `admin` | Full system access and user management |
+| `reception` | Patient registration, admission, cashier |
+| `doctor` | Paid doctor queue, patient file, clinical orders |
+| `laboratory` | Lab order queue, sample collection, result entry, reports |
+| `radiologist` | Paid radiology queue, report entry, image upload |
+| `pharmacy` | Drug catalog, inventory, manual prescriptions, dispensing |
+
+### Reception and Cashier
+
+- Patient search by national ID or phone.
+- Patient registration and quick-create API from the admission screen.
+- Smart patient lookup by national ID.
+- Admission creation for doctor, laboratory, and radiology services.
+- Laboratory admission can create a lab order with selected tests.
+- Cashier queue for admissions, prescriptions, and lab orders.
+- Payment registration with receipt numbers.
+- Cancellation for pending admissions, prescriptions, and lab orders.
+- Admission pricing in `config.py`.
+- Basic insurance plan calculation for admission payments.
+
+### Doctor Module
+
+- Queue of paid doctor admissions.
+- Patient file view with recent prescriptions, lab orders, and radiology admissions.
+- Unified clinical ordering:
+  - Drug prescriptions
+  - Laboratory test orders
+  - Radiology requests
+- Prescription totals are calculated from selected drugs and quantities.
+- Doctor visits can be marked completed.
+
+### Laboratory Module
+
+- Lab order worklist for pending, paid, collected, and resulted orders.
+- Sample collection status transition.
+- Result entry per lab order item.
+- Automatic low/normal/high flagging for numeric results based on sex-specific normal ranges.
+- Printable/report-oriented lab result view.
+
+### Radiology Module
+
+- Radiology admission queue for paid and completed radiology admissions.
+- Report creation and update per radiology admission.
+- Multi-image upload with validation and UUID-based stored filenames.
+- Uploaded files are served from `/uploads`.
+- Radiology admissions can be marked completed.
+
+### Pharmacy and Inventory
+
+- Drug catalog management.
+- Restocking through stock transactions.
+- Current stock is calculated from stock transaction sums.
+- Manual prescription creation for walk-in patients.
+- Paid prescription dispensing queue.
+- Stock availability checks before dispensing.
+- Dispensing creates negative stock transactions and marks prescriptions dispensed.
+- Prescription search by prescription ID or patient national ID.
+- Printable prescription view.
+
+### API Endpoints
+
+- `/api/drugs/search`: drug autocomplete and stock payload.
+- `/api/lab-tests/search`: active lab test autocomplete.
+- `/api/patients/lookup`: national ID patient lookup.
+- `/api/patients/quick-create`: quick patient creation for reception.
 
 ## Technology Stack
 
-- **Backend**: FastAPI (Python 3.10+)
-- **Database**: SQLite with SQLAlchemy ORM
-- **Frontend**: Jinja2 Templates, Pure CSS, Minimal jQuery
-- **Icons**: Font Awesome 6 (Free)
-- **Authentication**: JWT with secure cookies
+- Python 3.10+
+- FastAPI
+- Uvicorn
+- SQLite
+- Jinja2
+- python-multipart
+- Passlib
+- python-jose
+- aiofiles
+- python-dotenv
+- Font Awesome 6 through templates
+- Custom CSS in `static/css`
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.10 or higher
-- pip (Python package manager)
-
-### Setup Instructions
-
-1. **Clone the repository** (or extract the files)
-
-```bash
-cd SimpleHIS
-```
-
-2. **Install dependencies**
+1. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Create the first admin user**
+2. Create or update the initial admin user:
 
 ```bash
 python initial_admin.py
 ```
 
-Follow the prompts to create your admin account. Default credentials:
+Default prompt values:
+
 - Username: `admin`
 - Password: `admin123`
-- Full Name: `مدیر سیستم`
+- Full name: `System Admin`
 
-4. **Run the application**
+3. Optional: load testing catalog data and sample users:
+
+```bash
+python seeder.py
+```
+
+Seeder accounts:
+
+| Username | Role | Password |
+| --- | --- | --- |
+| `admin` | admin | `admin123` for newly created admin, or existing admin password |
+| `reception` | reception | `123456` |
+| `doctor` | doctor | `123456` |
+| `laboratory` | laboratory | `123456` |
+| `radiology` | radiologist | `123456` |
+| `pharmacy` | pharmacy | `123456` |
+
+4. Run the app:
+
+```bash
+python main.py
+```
+
+or:
 
 ```bash
 uvicorn main:app --reload
 ```
 
-Or simply:
+5. Open:
 
-```bash
-python main.py
-```
-
-5. **Access the system**
-
-Open your browser and navigate to:
-```
+```text
 http://localhost:8000
 ```
 
-Login with the admin credentials you created.
+## Main Routes
 
-## Default Port
+| Area | Routes |
+| --- | --- |
+| Common | `/`, `/login`, `/logout`, `/home`, `/print/prescription/{id}` |
+| Reception | `/reception/patients`, `/reception/patients/new`, `/reception/admit`, `/reception/cashier` |
+| Doctor | `/doctor/patients`, `/doctor/patient/{patient_id}/admission/{admission_id}`, `/doctor/orders/create` |
+| Laboratory | `/lab/orders`, `/lab/orders/{order_id}/results`, `/lab/orders/{order_id}/report` |
+| Radiology | `/radiology/admissions`, `/radiology/report/{admission_id}` |
+| Pharmacy | `/pharmacy/inventory`, `/pharmacy/drug/new`, `/pharmacy/restock`, `/pharmacy/manual-prescription`, `/pharmacy/dispense`, `/pharmacy/search` |
+| Admin | `/admin/users` |
+| API | `/api/drugs/search`, `/api/lab-tests/search`, `/api/patients/lookup`, `/api/patients/quick-create` |
 
-The application runs on port **8000** by default. If you need to change the port:
+## Data Model
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8080 --reload
-```
+The database schema is created by `init_db()` in `database.py`. The implemented tables are:
 
-## User Roles
+- `users`
+- `patients`
+- `admissions`
+- `payments`
+- `drugs`
+- `stock_transactions`
+- `prescriptions`
+- `prescription_items`
+- `radiology_reports`
+- `radiology_images`
+- `lab_tests`
+- `lab_orders`
+- `lab_order_items`
+- `lab_results`
 
-| Role | Persian Name | Access |
-|------|-------------|--------|
-| Admin | مدیرکل | Full access to all modules including user management |
-| Reception | پذیرش | Patient registration, admissions, cashier (payments) |
-| Doctor | پزشک | View patients, write prescriptions, complete visits |
-| Radiologist | رادیولوژیست | View radiology admissions, write reports, upload images |
-| Pharmacy | داروخانه | Inventory, manual prescriptions, dispense prescriptions |
-
-## Workflow
-
-### 1. Reception Workflow
-1. Search for existing patient or register new patient
-2. Admit patient (doctor visit or radiology) with description/reason
-3. Cashier pays for admission → status changes to "paid"
-
-### 2. Doctor Workflow
-1. View list of paid doctor admissions
-2. Open patient file
-3. Write prescription with unlimited drugs
-4. System auto-calculates total amount
-5. Complete visit when done
-
-### 3. Radiology Workflow
-1. View list of paid radiology admissions
-2. Write report and upload images
-3. Complete admission
-
-### 4. Pharmacy Workflow
-1. **Inventory**: View stock levels, add new drugs, restock
-2. **Manual Prescription**: Create prescriptions for walk-in customers
-3. **Dispense**: View paid prescriptions and dispense them (reduces stock)
-4. **Search**: Find old prescriptions by ID or patient national ID
-
-### 5. Prescription Payment & Printing
-1. Prescriptions go to cashier for payment
-2. After payment, pharmacy can dispense
-3. Print prescription invoice from multiple locations
-
-## Database Schema
-
-The system uses SQLite database (`hospital.db`) with the following main tables:
-
-- **users**: System users with roles
-- **patients**: Patient demographics
-- **admissions**: Patient admissions (doctor/radiology)
-- **payments**: Payment records for admissions and prescriptions
-- **drugs**: Drug master data
-- **stock_transactions**: Track drug inventory changes
-- **prescriptions**: Prescription headers
-- **prescription_items**: Individual drugs in prescriptions
-- **radiology_reports**: Radiology reports
-- **radiology_images**: Uploaded radiology images
+See [DATA_MODEL.md](DATA_MODEL.md) for the full table structure, relationships, cardinalities, and diagram notes for UML and EER diagrams.
 
 ## Project Structure
 
-```
-SimpleHIS/
-├── main.py                 # FastAPI application entry point
-├── database.py             # Database configuration
-├── auth.py                 # Authentication utilities
-├── initial_admin.py        # Script to create first admin user
-├── requirements.txt        # Python dependencies
-├── models/                 # Database models
-│   ├── user.py
-│   ├── patient.py
-│   ├── admission.py
-│   ├── payment.py
-│   ├── drug.py
-│   ├── stock.py
-│   ├── prescription.py
-│   └── radiology.py
-├── routers/                # API route handlers
-│   ├── common.py
-│   ├── reception.py
-│   ├── doctor.py
-│   ├── radiology.py
-│   ├── pharmacy.py
-│   └── admin.py
-├── templates/              # Jinja2 HTML templates
-│   ├── layout/
-│   ├── common/
-│   ├── reception/
-│   ├── doctor/
-│   ├── radiology/
-│   ├── pharmacy/
-│   ├── admin/
-│   └── print/
-├── static/                 # Static files
-│   ├── css/
-│   ├── js/
-│   └── assets/
-└── uploads/                # Uploaded files (radiology images)
+```text
+HIS/
+|-- main.py
+|-- database.py
+|-- auth.py
+|-- config.py
+|-- initial_admin.py
+|-- seeder.py
+|-- requirements.txt
+|-- routers/
+|   |-- common.py
+|   |-- reception.py
+|   |-- doctor.py
+|   |-- lab.py
+|   |-- radiology.py
+|   |-- pharmacy.py
+|   |-- admin.py
+|   `-- api.py
+|-- templates/
+|   |-- admin/
+|   |-- common/
+|   |-- doctor/
+|   |-- lab/
+|   |-- layout/
+|   |-- pharmacy/
+|   |-- print/
+|   |-- radiology/
+|   `-- reception/
+|-- static/
+|   |-- assets/
+|   |-- css/
+|   `-- js/
+|-- uploads/
+|-- docker/
+`-- hospital.db
 ```
 
-## Color Scheme
+## Important Notes
 
-The application uses a modern color scheme defined in CSS variables:
+- `hospital.db` is a local SQLite database file and is initialized automatically at app startup.
+- `uploads/` stores radiology images by generated UUID filenames.
+- Current stock is not stored directly on `drugs`; it is calculated from `stock_transactions`.
+- `payments.payable_id` is a polymorphic reference. Use `payments.payable_type` to determine whether the row points to an admission, prescription, or lab order.
+- For production, replace `SECRET_KEY` in `auth.py`, enable HTTPS, set secure cookie flags, restrict CORS, and back up both `hospital.db` and `uploads/`.
 
-**Light Mode:**
-- Background: `#efefef` (very light gray)
-- Primary: `#3698d4` (blue)
-- Card Background: `#ffffff` (white)
-- Text: `#333` (dark gray)
-
-**Dark Mode:**
-- Background: `#121212` (very dark)
-- Primary: `#3698d4` (blue)
-- Card Background: `#1e1e1e` (dark)
-- Text: `#e0e0e0` (light gray)
-
-## Features in Detail
-
-### Dynamic Prescription Form
-- Add unlimited drugs to a prescription
-- Auto-complete drug search
-- Auto-fill drug details (manufacturer, form, dosage, price)
-- Auto-calculate total amount
-- Editable instructions for each drug
-
-### Stock Management
-- Real-time stock calculation from transactions
-- Low-stock highlighting (below minimum threshold)
-- Stock reduced automatically when dispensing prescriptions
-
-### Print-Friendly Invoices
-- Clean, professional prescription printouts
-- Includes hospital logo, patient info, drug table
-- Optimized for A4 paper
-- Auto-print on page load
-
-## Security Notes
-
-⚠️ **Important for Production:**
-
-1. Change the `SECRET_KEY` in `auth.py` to a secure random string
-2. Use HTTPS in production
-3. Configure proper firewall rules
-4. Regular database backups
-5. Keep Python packages updated
-
-## Customization
-
-### Adding a Logo
-
-Replace `/static/assets/logo.png` with your hospital logo.
-
-### Changing Colors
-
-Edit `/static/css/vars.css` to customize colors for both light and dark modes.
-
-### Adding More Roles
-
-1. Edit `models/user.py` to add new role to `UserRole` enum
-2. Update sidebar menu logic in `templates/layout/panel.htm`
-3. Create new router and templates for the role
-
-## Troubleshooting
-
-### Database Issues
-
-If you encounter database errors, delete `hospital.db` and restart:
+## Useful Commands
 
 ```bash
-rm hospital.db
 python initial_admin.py
+python seeder.py
 python main.py
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
-
-### Port Already in Use
-
-If port 8000 is busy, use a different port:
-
-```bash
-uvicorn main:app --port 8080 --reload
-```
-
-### Static Files Not Loading
-
-Make sure the `static` and `uploads` directories exist and have proper permissions.
-
-## Support
-
-For issues, questions, or contributions, please contact the development team.
 
 ## License
 
-This project is developed for internal hospital/clinic use.
-
----
-
-**Version:** 2.0  
-**Date:** February 16, 2026  
-**Prepared for:** Internal Hospital/Clinic Use
+Internal hospital/clinic and university project use.
