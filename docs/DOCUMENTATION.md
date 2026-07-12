@@ -36,13 +36,66 @@ The codebase uses direct `sqlite3` access through helpers in `database.py`. It d
 - Uvicorn
 - SQLite
 - Jinja2
-- python-multipart
-- Passlib with bcrypt
-- python-jose with cryptography
-- aiofiles
 - python-dotenv
-- Font Awesome through templates
+- Font Awesome 6 through templates
 - Custom CSS in `static/css`
+
+
+## Installation
+
+1. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Create or update the initial admin user:
+
+```bash
+python initial_admin.py
+```
+
+Default prompt values:
+
+- Username: `admin`
+- Password: `admin123`
+- Full name: `System Admin`
+
+3. Optional: load testing catalog data and sample users:
+
+```bash
+python seeder.py
+```
+
+Seeder accounts:
+
+| Username | Role | Password |
+| --- | --- | --- |
+| `admin` | admin | `admin123` for newly created admin, or existing admin password |
+| `reception` | reception | `123456` |
+| `doctor` | doctor | `123456` |
+| `laboratory` | laboratory | `123456` |
+| `radiology` | radiologist | `123456` |
+| `pharmacy` | pharmacy | `123456` |
+
+4. Run the app:
+
+```bash
+python main.py
+```
+
+or:
+
+```bash
+uvicorn main:app --reload
+```
+
+5. Open:
+
+```text
+http://localhost:8000
+```
+
 
 ## Roles
 
