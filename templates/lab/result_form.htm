@@ -48,12 +48,11 @@
                             <td>
                                 <strong>{{ item.test.code }}</strong>
                                 <div class="muted">{{ item.test.name }}</div>
-                                <input type="hidden" name="item_id[]" value="{{ item.id }}">
                             </td>
                             <td>{{ item.test.sample_type or '-' }}</td>
                             <td class="normal-range">{{ range or '-' }}</td>
                             <td>
-                                <input type="text" name="result_value[]" class="form-control lab-result-input"
+                                <input type="text" name="result_value_{{ item.id }}" class="form-control lab-result-input"
                                        value="{{ item.result.value if item.result else '' }}"
                                        data-range="{{ range or '' }}">
                             </td>
@@ -78,10 +77,14 @@
 
 <script>
 function parseRange(text) {
-    const numbers = String(text || '').match(/-?\d+(\.\d+)?/g) || [];
-    if (numbers.length >= 2) return [Math.min(Number(numbers[0]), Number(numbers[1])), Math.max(Number(numbers[0]), Number(numbers[1]))];
-    if (numbers.length === 1 && String(text).trim().startsWith('<')) return [null, Number(numbers[0])];
-    if (numbers.length === 1 && String(text).trim().startsWith('>')) return [Number(numbers[0]), null];
+    const source = String(text || '').trim();
+    const number = '[-+]?\\d+(?:\\.\\d+)?';
+    const upper = source.match(new RegExp(`^(?:<=|<|\\u2264)\\s*(${number})`));
+    if (upper) return [null, Number(upper[1])];
+    const lower = source.match(new RegExp(`^(?:>=|>|\\u2265)\\s*(${number})`));
+    if (lower) return [Number(lower[1]), null];
+    const range = source.match(new RegExp(`(${number})\\s*(?:-|\\u2013|\\u2014|\\bto\\b)\\s*(${number})`, 'i'));
+    if (range) return [Math.min(Number(range[1]), Number(range[2])), Math.max(Number(range[1]), Number(range[2]))];
     return [null, null];
 }
 
