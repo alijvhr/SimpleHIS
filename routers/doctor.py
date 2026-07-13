@@ -40,11 +40,112 @@ def doctor_admissions(db):
     return admissions
 
 
+def patient_admissions(db, patient_id: int):
+    return [
+        get_admission(db, row.id)
+        for row in all_rows(db, "SELECT id FROM admissions WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+
+
+def patient_prescriptions(db, patient_id: int):
+    return [
+        get_prescription(db, row.id)
+        for row in all_rows(db, "SELECT id FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+
+
+def patient_lab_orders(db, patient_id: int):
+    return [
+        get_lab_order(db, row.id)
+        for row in all_rows(db, "SELECT id FROM lab_orders WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+
+
+def patient_radiology_admissions(db, patient_id: int):
+    return [
+        get_admission(db, row.id)
+        for row in all_rows(
+            db,
+            "SELECT id FROM admissions WHERE patient_id = ? AND admission_type = 'radiology' ORDER BY created_at DESC",
+            (patient_id,),
+        )
+    ]
+
+
 @router.get("/patients", response_class=HTMLResponse)
 async def doctor_patients(request: Request, current_user=Depends(require_role(["admin", "doctor"])), db=Depends(get_db)):
     return templates.TemplateResponse(
         "doctor/patients.htm",
         {"request": request, "current_user": current_user, "active_page": "doctor_patients", "admissions": doctor_admissions(db)},
+    )
+
+
+@router.get("/patient/{patient_id}/file", response_class=HTMLResponse)
+async def show_patient_file(
+    request: Request,
+    patient_id: int,
+    current_user=Depends(require_role(["admin", "doctor"])),
+    db=Depends(get_db),
+):
+    patient = get_patient(db, patient_id)
+    if not patient:
+        return RedirectResponse(url="/doctor/patients", status_code=302)
+
+    return templates.TemplateResponse(
+        "doctor/patient_history.htm",
+        {
+            "request": request,
+            "current_user": current_user,
+            "active_page": "doctor_patients",
+            "patient": patient,
+            "admissions": patient_admissions(db, patient_id),
+            "prescriptions": patient_prescriptions(db, patient_id),
+            "lab_orders": patient_lab_orders(db, patient_id),
+            "radiology_admissions": patient_radiology_admissions(db, patient_id),
+        },
+    )
+
+
+@router.get("/patient/{patient_id}/admission/{admission_id}/results", response_class=HTMLResponse)
+async def show_admission_results(
+    request: Request,
+    patient_id: int,
+    admission_id: int,
+    current_user=Depends(require_role(["admin", "doctor"])),
+    db=Depends(get_db),
+):
+    patient = get_patient(db, patient_id)
+    admission = one(
+        db,
+        "SELECT * FROM admissions WHERE id = ? AND patient_id = ? AND admission_type = 'doctor'",
+        (admission_id, patient_id),
+    )
+    if not patient or not admission:
+        return RedirectResponse(url="/doctor/patients", status_code=302)
+    admission.patient = patient
+
+    lab_orders = [
+        get_lab_order(db, row.id)
+        for row in all_rows(
+            db,
+            "SELECT id FROM lab_orders WHERE patient_id = ? AND admission_id = ? ORDER BY created_at DESC",
+            (patient_id, admission_id),
+        )
+    ]
+    if not lab_orders:
+        lab_orders = patient_lab_orders(db, patient_id)
+
+    return templates.TemplateResponse(
+        "doctor/admission_results.htm",
+        {
+            "request": request,
+            "current_user": current_user,
+            "active_page": "doctor_patients",
+            "patient": patient,
+            "admission": admission,
+            "lab_orders": lab_orders,
+            "radiology_admissions": patient_radiology_admissions(db, patient_id),
+        },
     )
 
 

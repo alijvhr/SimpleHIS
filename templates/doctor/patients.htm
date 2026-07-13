@@ -31,10 +31,20 @@
                         <td>{{ admission.description|truncate(80) }}</td>
                         <td>{{ admission.paid_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
                         <td>
+                            <div class="action-row">
                             <a href="/doctor/patient/{{ admission.patient_id }}/admission/{{ admission.id }}" class="btn btn-primary btn-sm">
                                 <i class="fas fa-folder-open"></i>
                                 ورود به پرونده
                             </a>
+                            <a href="/doctor/patient/{{ admission.patient_id }}/file" class="btn btn-secondary btn-sm">
+                                <i class="fas fa-file-medical"></i>
+                                پرونده
+                            </a>
+                            <a href="/doctor/patient/{{ admission.patient_id }}/admission/{{ admission.id }}/results" class="btn btn-success btn-sm">
+                                <i class="fas fa-notes-medical"></i>
+                                نتایج
+                            </a>
+                            </div>
                         </td>
                     </tr>
                     {% endfor %}
