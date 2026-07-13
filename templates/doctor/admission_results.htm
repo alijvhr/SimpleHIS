@@ -1,0 +1,144 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}نتایج بیمار - سامانه اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">نتایج بیمار: {{ patient.full_name }}</h2>
+        <div class="action-row">
+            <a href="/doctor/patient/{{ patient.id }}/admission/{{ admission.id }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-folder-open"></i>
+                ورود به پرونده
+            </a>
+            <a href="/doctor/patients" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-right"></i>
+                بازگشت
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-4 mb-4">
+            <div><strong>شماره پذیرش:</strong> #{{ admission.id }}</div>
+            <div><strong>کد ملی:</strong> {{ patient.national_id }}</div>
+            <div><strong>علت مراجعه:</strong> {{ admission.description|truncate(80) }}</div>
+            <div><strong>وضعیت:</strong> {{ admission.status.value }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">نتایج آزمایشگاه</h3>
+    </div>
+    <div class="card-body">
+        {% if lab_orders %}
+        {% for order in lab_orders %}
+        <div class="mb-4">
+            <div class="flex-between mb-2">
+                <div>
+                    <strong>آزمایش #{{ order.id }}</strong>
+                    <span class="muted">{{ order.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</span>
+                </div>
+                <div class="action-row">
+                    <span class="badge badge-info">{{ order.status.value }}</span>
+                    <a href="/lab/orders/{{ order.id }}/report" class="btn btn-secondary btn-sm">
+                        <i class="fas fa-eye"></i>
+                        گزارش کامل
+                    </a>
+                </div>
+            </div>
+            {% if order.clinical_note %}
+            <div class="alert alert-info"><strong>یادداشت بالینی:</strong> {{ order.clinical_note }}</div>
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>کد</th>
+                            <th>آزمایش</th>
+                            <th>نتیجه</th>
+                            <th>واحد</th>
+                            <th>محدوده نرمال</th>
+                            <th>وضعیت</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order.items %}
+                        {% set range = item.test.female_normal_range if patient.gender.value == 'female' else item.test.male_normal_range %}
+                        <tr>
+                            <td>{{ item.test.code }}</td>
+                            <td>{{ item.test.name }}</td>
+                            <td><strong>{{ item.result.value if item.result else 'در انتظار' }}</strong></td>
+                            <td>{{ item.test.unit or '-' }}</td>
+                            <td>{{ range or '-' }}</td>
+                            <td>
+                                {% if item.result and item.result.flag == 'normal' %}
+                                <span class="badge badge-success">طبیعی</span>
+                                {% elif item.result and item.result.flag == 'low' %}
+                                <span class="badge badge-danger">پایین</span>
+                                {% elif item.result and item.result.flag == 'high' %}
+                                <span class="badge badge-danger">بالا</span>
+                                {% else %}
+                                <span class="badge badge-secondary">در انتظار</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>برای این پذیرش نتیجه آزمایشگاهی ثبت نشده است.</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">نتایج رادیولوژی</h3>
+    </div>
+    <div class="card-body">
+        {% if radiology_admissions %}
+        {% for item in radiology_admissions %}
+        <div class="mb-4">
+            <div class="flex-between mb-2">
+                <div>
+                    <strong>{{ item.radiology_type or 'رادیولوژی' }} #{{ item.id }}</strong>
+                    <span class="muted">{{ item.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</span>
+                </div>
+                <span class="badge badge-info">{{ item.status.value }}</span>
+            </div>
+            <div class="alert alert-info"><strong>شرح درخواست:</strong> {{ item.description }}</div>
+            {% if item.radiology_report %}
+            <div style="white-space: pre-wrap; background: var(--bg); padding: 1rem; border-radius: 6px;">{{ item.radiology_report.report_text }}</div>
+            {% if item.radiology_report.images %}
+            <div class="grid grid-3 mt-3">
+                {% for image in item.radiology_report.images %}
+                <a href="/uploads/{{ image.filename }}" target="_blank">
+                    <img src="/uploads/{{ image.filename }}"
+                         style="width: 100%; border-radius: 6px; border: 1px solid var(--border);"
+                         alt="Radiology Image">
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <span class="badge badge-warning">گزارش ثبت نشده است</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <span>نتیجه رادیولوژی برای این بیمار ثبت نشده است.</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
