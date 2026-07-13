@@ -100,6 +100,44 @@ async def new_patient_form(request: Request, current_user=Depends(require_role([
     )
 
 
+@router.get("/patients/{patient_id}", response_class=HTMLResponse)
+async def patient_detail(
+    request: Request,
+    patient_id: int,
+    current_user=Depends(require_role(["admin", "reception"])),
+    db=Depends(get_db),
+):
+    patient = get_patient(db, patient_id)
+    if not patient:
+        return RedirectResponse(url="/reception/patients", status_code=302)
+
+    admissions = [
+        get_admission(db, row.id)
+        for row in all_rows(db, "SELECT id FROM admissions WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+    prescriptions = [
+        get_prescription(db, row.id)
+        for row in all_rows(db, "SELECT id FROM prescriptions WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+    lab_orders = [
+        get_lab_order(db, row.id)
+        for row in all_rows(db, "SELECT id FROM lab_orders WHERE patient_id = ? ORDER BY created_at DESC", (patient_id,))
+    ]
+
+    return templates.TemplateResponse(
+        "reception/patient_detail.htm",
+        {
+            "request": request,
+            "current_user": current_user,
+            "active_page": "patients",
+            "patient": patient,
+            "admissions": admissions,
+            "prescriptions": prescriptions,
+            "lab_orders": lab_orders,
+        },
+    )
+
+
 @router.post("/patients/new")
 async def create_patient(
     request: Request,

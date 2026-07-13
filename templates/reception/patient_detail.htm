@@ -1,0 +1,148 @@
+{% extends "layout/panel.htm" %}
+
+{% block title %}پرونده بیمار - سامانه اطلاعات بیمارستان{% endblock %}
+
+{% block main_content %}
+<div class="card">
+    <div class="card-header flex-between">
+        <h2 class="card-title">پرونده بیمار: {{ patient.full_name }}</h2>
+        <div class="action-row">
+            <a href="/reception/admit?patient_id={{ patient.id }}" class="btn btn-success btn-sm">
+                <i class="fas fa-user-plus"></i>
+                پذیرش جدید
+            </a>
+            <a href="/reception/patients" class="btn btn-secondary btn-sm">
+                <i class="fas fa-arrow-right"></i>
+                بازگشت
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="grid grid-4 mb-4">
+            <div><strong>کد ملی:</strong> {{ patient.national_id }}</div>
+            <div><strong>تلفن:</strong> {{ patient.phone }}</div>
+            <div><strong>تاریخ تولد:</strong> {{ patient.birth_date }}</div>
+            <div>
+                <strong>جنسیت:</strong>
+                {% if patient.gender.value == 'male' %}مرد{% elif patient.gender.value == 'female' %}زن{% else %}سایر{% endif %}
+            </div>
+        </div>
+        {% if patient.address %}
+        <div class="alert alert-info">
+            <strong>آدرس:</strong> {{ patient.address }}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-header">
+        <h3 class="card-title">پذیرش ها</h3>
+    </div>
+    <div class="card-body">
+        {% if admissions %}
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>شماره</th>
+                        <th>نوع</th>
+                        <th>شرح</th>
+                        <th>وضعیت</th>
+                        <th>تاریخ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for admission in admissions %}
+                    <tr>
+                        <td>#{{ admission.id }}</td>
+                        <td>
+                            {% if admission.admission_type.value == 'doctor' %}ویزیت پزشک
+                            {% elif admission.admission_type.value == 'laboratory' %}آزمایشگاه
+                            {% elif admission.admission_type.value == 'radiology' %}رادیولوژی
+                            {% else %}{{ admission.admission_type.value }}{% endif %}
+                        </td>
+                        <td>{{ admission.description|truncate(100) }}</td>
+                        <td><span class="badge badge-info">{{ admission.status.value }}</span></td>
+                        <td>{{ admission.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="muted">پذیرشی برای این بیمار ثبت نشده است.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-2 mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">نسخه ها</h3>
+        </div>
+        <div class="card-body">
+            {% if prescriptions %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>شماره</th>
+                            <th>مبلغ</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prescription in prescriptions %}
+                        <tr>
+                            <td>#{{ prescription.id }}</td>
+                            <td>{{ "{:,}".format(prescription.total_amount|int) }} تومان</td>
+                            <td><span class="badge badge-info">{{ prescription.status.value }}</span></td>
+                            <td>{{ prescription.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="muted">نسخه ای برای این بیمار ثبت نشده است.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">آزمایش ها</h3>
+        </div>
+        <div class="card-body">
+            {% if lab_orders %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>شماره</th>
+                            <th>آیتم ها</th>
+                            <th>وضعیت</th>
+                            <th>تاریخ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in lab_orders %}
+                        <tr>
+                            <td>#{{ order.id }}</td>
+                            <td>{{ order.items|length }}</td>
+                            <td><span class="badge badge-info">{{ order.status.value }}</span></td>
+                            <td>{{ order.created_at[:16]|replace('-', '/')|replace('T', ' ') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="muted">آزمایشی برای این بیمار ثبت نشده است.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
